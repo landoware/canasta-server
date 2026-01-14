@@ -79,8 +79,8 @@ var pointValues = map[Rank]int{
 }
 
 type Card struct {
-	Suit Suit
-	Rank Rank
+	Suit Suit `json:"suit"`
+	Rank Rank `json:"rank"`
 }
 
 func (card Card) Value() int {
@@ -98,7 +98,11 @@ func (card Card) String() string {
 	return fmt.Sprintf("%s of %s", rankString[card.Rank], suitString[card.Suit])
 }
 
-func NewDeck() Deck {
+type Deck struct {
+	Cards []Card `json:"cards"`
+}
+
+func NewDeck() *Deck {
 	deck := make([]Card, 0)
 	ranks := []Rank{Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Jack, Queen, King, Ace}
 	suits := []Suit{Hearts, Diamonds, Clubs, Spades}
@@ -113,7 +117,7 @@ func NewDeck() Deck {
 		deck = append(deck, Card{Clubs, Joker})
 	}
 
-	return Deck{deck}
+	return &Deck{deck}
 }
 
 func (deck Deck) Count() int {
