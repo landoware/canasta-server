@@ -17,11 +17,11 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       DB_SCHEMA: ${DB_SCHEMA}
     depends_on:
-      psql_bp:
+      psql:
         condition: service_healthy
     networks:
       - canasta
-  psql_bp:
+  psql:
     image: postgres:latest
     restart: unless-stopped
     environment:
@@ -31,7 +31,7 @@ services:
     ports:
       - "${DB_PORT}:5432"
     volumes:
-      - psql_volume_bp:/var/lib/postgresql/data
+      - psql_volume:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "sh -c 'pg_isready -U ${DB_USERNAME} -d ${DB_DATABASE}'"]
       interval: 5s
@@ -42,6 +42,6 @@ services:
       - canasta
 
 volumes:
-  psql_volume_bp:
+  psql_volume:
 networks:
   canasta:
