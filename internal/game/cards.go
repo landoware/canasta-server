@@ -21,6 +21,10 @@ var suitString = map[Suit]string{
 	Spades:   "Spades",
 }
 
+func (s Suit) String() string {
+	return suitString[s]
+}
+
 func (suit Suit) isBlack() bool {
 	return suit == Clubs || suit == Spades
 }
@@ -42,6 +46,7 @@ const (
 	Two
 	Joker
 	Three
+	Wild
 )
 
 var rankString = map[Rank]string{
@@ -59,6 +64,7 @@ var rankString = map[Rank]string{
 	Two:   "Two",
 	Joker: "Joker",
 	Three: "Three",
+	Wild:  "Wild",
 }
 
 var pointValues = map[Rank]int{
@@ -78,6 +84,10 @@ var pointValues = map[Rank]int{
 	Three: 100,
 }
 
+func (r Rank) String() string {
+	return rankString[r]
+}
+
 type Card struct {
 	Suit Suit `json:"suit"`
 	Rank Rank `json:"rank"`
@@ -95,7 +105,7 @@ func (card Card) String() string {
 	if card.Rank == Joker {
 		return "Joker"
 	}
-	return fmt.Sprintf("%s of %s", rankString[card.Rank], suitString[card.Suit])
+	return fmt.Sprintf("%s of %s", card.Rank.String(), card.Suit.String())
 }
 
 func (c Card) IsWild() bool {
