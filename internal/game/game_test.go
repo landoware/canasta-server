@@ -22,11 +22,11 @@ func TestDeal(t *testing.T) {
 	}
 
 	if len(gameObj.Hand.DiscardPile) != 1 {
-		t.Errorf("Only one card should be discarded. %d given.", len(gameObj.State.DiscardPile))
+		t.Errorf("Only one card should be discarded. %d given.", len(gameObj.Hand.DiscardPile))
 	}
 
 	if gameObj.Hand.Deck.Count() != 111 {
-		t.Errorf("Too many cards delt. Have %d in deck, 111 expected.", gameObj.State.Deck.Count())
+		t.Errorf("Too many cards delt. Have %d in deck, 111 expected.", gameObj.Hand.Deck.Count())
 	}
 
 }

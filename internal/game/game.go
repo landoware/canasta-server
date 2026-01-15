@@ -7,7 +7,6 @@ import (
 
 type Game struct {
 	Id         string    `json:"id"`
-	State      Hand      `json:"state"`
 	Players    []*Player `json:"players"`
 	TeamA      *Team     `json:"teamA"`
 	TeamB      *Team     `json:"teamB"`
@@ -46,6 +45,7 @@ type Team struct {
 	Melds    []Meld    `json:"melds"`
 	Canastas []Canasta `json:"canastas"`
 	GoneDown bool      `json:"goneDown"`
+	CanGoOut bool      `json:"canGoOut"`
 }
 
 var meldRequirements = []int{
@@ -57,16 +57,18 @@ var meldRequirements = []int{
 
 func NewGame(playerNames []string) Game {
 	teamA := Team{
-		0,
-		make([]Meld, 0),
-		make([]Canasta, 0),
-		false,
+		Score:    0,
+		Melds:    make([]Meld, 0),
+		Canastas: make([]Canasta, 0),
+		GoneDown: false,
+		CanGoOut: false,
 	}
 	teamB := Team{
-		0,
-		make([]Meld, 0),
-		make([]Canasta, 0),
-		false,
+		Score:    0,
+		Melds:    make([]Meld, 0),
+		Canastas: make([]Canasta, 0),
+		GoneDown: false,
+		CanGoOut: false,
 	}
 
 	players := make([]*Player, 0)
@@ -107,7 +109,7 @@ func NewGame(playerNames []string) Game {
 
 func (g Game) EndHand() {
 	// Score here?
-	// g.Score()
+	g.Score()
 
 	if g.HandNumber == 3 {
 		g.EndGame()
@@ -143,6 +145,10 @@ func (g Game) NewHand() {
 	g.Deal()
 
 	g.HandNumber++
+}
+
+func (g Game) Score() {
+
 }
 
 func (g Game) EndGame() {
