@@ -98,6 +98,20 @@ func (card Card) String() string {
 	return fmt.Sprintf("%s of %s", rankString[card.Rank], suitString[card.Suit])
 }
 
+func (c Card) IsWild() bool {
+	return c.Rank == Joker || c.Rank == Two
+}
+
+func WildCount(cards []Card) (count int) {
+	count = 0
+	for _, card := range cards {
+		if card.IsWild() {
+			count++
+		}
+	}
+	return
+}
+
 type Deck struct {
 	Cards []Card `json:"cards"`
 }
