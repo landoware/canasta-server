@@ -189,8 +189,6 @@ func (p *Player) NewMeld(cardIndexes []int) error {
 	// Cool let's do it then
 	if p.Team.GoneDown {
 		p.Team.Melds = append(p.Team.Melds, meld)
-
-		// Push it over there Patrick
 		p.Hand = removeCards(p.Hand, cardIndexes)
 
 		return nil
@@ -224,7 +222,7 @@ func (p *Player) ValidateMeld(cardIndexes []int) (meld Meld, err error) {
 		}
 
 		// Can't use a three for a canasta
-		if p.Hand[i].Rank == Three {
+		if p.Hand[handIndex].Rank == Three {
 			return meld, errors.New("Cannot use threes in melds")
 		}
 
@@ -242,6 +240,9 @@ func (p *Player) ValidateMeld(cardIndexes []int) (meld Meld, err error) {
 		return meld, errors.New("Cannot use more than three wildcards in an unnatural Canasta")
 	}
 
+	if allWilds {
+		rank = Wild
+	}
 	meld = Meld{
 		Rank:      rank,
 		Cards:     cards,
@@ -249,6 +250,37 @@ func (p *Player) ValidateMeld(cardIndexes []int) (meld Meld, err error) {
 	}
 
 	return meld, nil
+}
+
+func (p *Player) AddToMeld(cardIndexes []int, meld *Meld) error {
+	var cards []Card
+
+	for _, handIndex := range cardIndexes {
+		card := p.Hand[handIndex]
+		if card.Rank != meld.Rank && !card.IsWild() {
+			return errors.New("Card does not match this meld")
+		}
+		if card.Rank == Three {
+			return errors.New("Cannot use threes in melds")
+		}
+		if meld.Rank == Seven && card.IsWild() {
+			return errors.New("Cannot use wildcards in a Sevens meld")
+		}
+
+		if card.IsWild() {
+			meld.Unnatural = true
+		}
+		cards = append(cards, p.Hand[handIndex])
+	}
+
+	if len(meld.Cards) >= 7 {
+		p.NewCanasta(meld)
+	} else {
+		meld.Cards = append(meld.Cards, cards...)
+		p.Hand = removeCards(p.Hand, cardIndexes)
+	}
+
+	return nil
 }
 
 func removeCards(hand []Card, indices []int) []Card {
@@ -262,11 +294,11 @@ func removeCards(hand []Card, indices []int) []Card {
 	return hand
 }
 
-func (p *Player) GoDown() {
+func (g *Game) GoDown(p *Player) {
 
 }
 
-func (p *Player) NewCanasta() {
+func (p *Player) NewCanasta(meld *Meld) {
 
 }
 
@@ -274,6 +306,25 @@ func (p *Player) BurnCard(canastaId int) {
 
 }
 
-func (p *Player) Discard(cardId int) {
+func (g *Game) Discard(p *Player, cardId int) error {
+	// Are they allowed to go out?
+	// If not they need at least two cards in their hand PRIOR to discarding.
+	if !p.Team.CanGoOut {
+		if len(p.Hand) < 2 {
+			return errors.New("Can't go out yet!")
+		}
+	}
+
+	discard := removeCards(p.Hand, []int{cardId})
+	g.Hand.DiscardPile = append(g.Hand.DiscardPile, discard[0])
+
+	return nil
+}
+
+func (p Player) CanPickUpDiscardPile(topCard Card) bool {
+	return true
+}
+
+func (g *Game) PickUpDiscardPile(p *Player, cardIds []int) {
 
 }
