@@ -1,63 +1,33 @@
-# Project canasta-server
+# Canasta
 
-One Paragraph of project description goes here
+A web based four-deck Canasta game using the Pierson family rules.
 
-## Getting Started
+## Rules
 
-These instructions will get you a copy of the project up and running on your local machine for development and testing purposes. See deployment for notes on how to deploy the project on a live system.
+Four players are required, and you'll form teams of two. A full game of Canasta consists of four "Hands". Each player starts with 15 cards in their hand, and 11 cards in a secondary pile which can be earned after that player's first Canasta. A Canasta is seven or more cards of the same type, and these are the primary way your team earns points.
 
-## MakeFile
+Your team's first objective is to "go down", or get melds (in-progress Canastas) started. Once one partner goes down, the other may as well. To start a meld, you require three of the same card. Each hand has increasing point requirements to go down at the start of the hand:
 
-Run build make command with tests
+1. 50 points
+2. 90 points
+3. 120 points
+4. 150 points
 
-```bash
-make all
-```
+## Card Values
 
-Build the application
+- Joker: 50
+- Aces & Deuces: 20
+- 8 through King: 10
+- 4 through 7: 5
+- Threes are special:
+  - Red Threes - Set aside as drawn. Player draws a new card from the deck for each red three in the 15 card hand or drawn during play. No extra card for the red threes in the 11 card hand.
+  - Black Threes - Played to stop the next player from picking up the discard pile. There is a special point count for all threes. Threes are not used to make canasta's.
 
-```bash
-make build
-```
+## Ending the Hand
 
-Run the application
+To end a hand, a team needs to make at least the required Canastas, and the player "going out" needs to end their turn with no cards after the discard at the end of their turn. The required Canastas and their point values are:
 
-```bash
-make run
-```
-
-Create DB container
-
-```bash
-make docker-run
-```
-
-Shutdown DB Container
-
-```bash
-make docker-down
-```
-
-DB Integrations Test:
-
-```bash
-make itest
-```
-
-Live reload the application:
-
-```bash
-make watch
-```
-
-Run the test suite:
-
-```bash
-make test
-```
-
-Clean up binary from the last build:
-
-```bash
-make clean
-```
+- Wildcards (2500 points)
+- Sevens (1500 points)
+- At least one Natural Canasta (500 points)
+- At least one Unnatural Canasta. An unnatural Canasta has at least one wildcard (300 points)
