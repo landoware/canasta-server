@@ -6,16 +6,18 @@ import (
 )
 
 type Game struct {
-	Id    string `json:"id"`
-	State State  `json:"state"`
+	Id         string    `json:"id"`
+	State      Hand      `json:"state"`
+	Players    []*Player `json:"players"`
+	TeamA      *Team     `json:"teamA"`
+	TeamB      *Team     `json:"teamB"`
+	Hand       *Hand     `json:"hand"`
+	HandNumber int       `json:"handNumber"`
 }
 
-type State struct {
-	Deck        *Deck     `json:"deck"`
-	DiscardPile []Card    `json:"discardPile"`
-	Players     []*Player `json:"players"`
-	TeamA       *Team     `json:"teamA"`
-	TeamB       *Team     `json:"teamB"`
+type Hand struct {
+	Deck        *Deck  `json:"deck"`
+	DiscardPile []Card `json:"discardPile"`
 }
 
 type Player struct {
@@ -40,18 +42,28 @@ type Canasta struct {
 }
 
 type Team struct {
+	Score    int       `json:"score"`
 	Melds    []Meld    `json:"melds"`
 	Canastas []Canasta `json:"canastas"`
 	GoneDown bool      `json:"goneDown"`
 }
 
+var meldRequirements = []int{
+	50,
+	90,
+	120,
+	150,
+}
+
 func NewGame(playerNames []string) Game {
 	teamA := Team{
+		0,
 		make([]Meld, 0),
 		make([]Canasta, 0),
 		false,
 	}
 	teamB := Team{
+		0,
 		make([]Meld, 0),
 		make([]Canasta, 0),
 		false,
@@ -76,19 +88,65 @@ func NewGame(playerNames []string) Game {
 		}
 	}
 
-	state := State{
-		Deck:    NewDeck(),
-		TeamA:   &teamA,
-		TeamB:   &teamB,
-		Players: players,
+	hand := &Hand{
+		Deck:        NewDeck(),
+		DiscardPile: make([]Card, 0),
 	}
 
-	state.Deck.Shuffle()
+	hand.Deck.Shuffle()
 
 	return Game{
-		Id:    getID(),
-		State: state,
+		Id:         getID(),
+		TeamA:      &teamA,
+		TeamB:      &teamB,
+		Players:    players,
+		Hand:       hand,
+		HandNumber: 1,
 	}
+}
+
+func (g Game) EndHand() {
+	// Score here?
+	// g.Score()
+
+	if g.HandNumber == 3 {
+		g.EndGame()
+	}
+
+	g.NewHand()
+
+}
+
+func (g Game) NewHand() {
+	// Reset the player states
+	for _, player := range g.Players {
+		player.Hand = make([]Card, 0)
+		player.Foot = make([]Card, 0)
+		player.StagingMelds = make([]Meld, 0)
+		player.MadeCanasta = false
+	}
+	// Clear out team melds and canastas
+	g.TeamA.Melds = make([]Meld, 0)
+	g.TeamA.Canastas = make([]Canasta, 0)
+	g.TeamA.GoneDown = false
+	g.TeamB.Melds = make([]Meld, 0)
+	g.TeamB.Canastas = make([]Canasta, 0)
+	g.TeamB.GoneDown = false
+
+	hand := &Hand{
+		Deck:        NewDeck(),
+		DiscardPile: make([]Card, 0),
+	}
+
+	hand.Deck.Shuffle()
+
+	g.Deal()
+
+	g.HandNumber++
+}
+
+func (g Game) EndGame() {
+
 }
 
 func getID() string {
@@ -98,22 +156,22 @@ func getID() string {
 func (g *Game) Deal() {
 	// Deal the Hand
 	for range 15 {
-		for _, player := range g.State.Players {
-			card := g.State.Deck.Draw(1)[0]
+		for _, player := range g.Players {
+			card := g.Hand.Deck.Draw(1)[0]
 			player.Hand = append(player.Hand, card)
 		}
 	}
 
 	// Deal the Feet
 	for range 11 {
-		for _, player := range g.State.Players {
-			card := g.State.Deck.Draw(1)[0]
+		for _, player := range g.Players {
+			card := g.Hand.Deck.Draw(1)[0]
 			player.Foot = append(player.Foot, card)
 		}
 	}
 	// Discard the top card
-	discard := g.State.Deck.Draw(1)[0]
-	g.State.DiscardPile = append(g.State.DiscardPile, discard)
+	discard := g.Hand.Deck.Draw(1)[0]
+	g.Hand.DiscardPile = append(g.Hand.DiscardPile, discard)
 }
 
 func (p *Player) NewMeld(cardIndexes []int) error {
