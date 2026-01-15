@@ -31,30 +31,95 @@ func TestDeal(t *testing.T) {
 
 }
 
-func TestMakeMeld(t *testing.T) {
-	var tests = []struct {
-		hand  []game.Card
-		valid bool
-		name  string
+func getMeldTestScenarios() []struct {
+	name     string
+	hand     []game.Card
+	valid    bool
+	goneDown bool
+} {
+	return []struct {
+		name     string
+		hand     []game.Card
+		valid    bool
+		goneDown bool
 	}{
-		{[]game.Card{game.Card{game.Clubs, game.Five}, game.Card{game.Clubs, game.Five}, game.Card{game.Clubs, game.Five}}, true, "natural"},
-		{[]game.Card{game.Card{game.Clubs, game.Five}, game.Card{game.Clubs, game.Six}, game.Card{game.Clubs, game.Seven}}, false, "mixed rank"},
-		{[]game.Card{game.Card{game.Clubs, game.Joker}, game.Card{game.Clubs, game.Six}, game.Card{game.Clubs, game.Seven}}, false, "mixed rank with wildcard"},
-		{[]game.Card{game.Card{game.Clubs, game.Two}, game.Card{game.Clubs, game.Joker}, game.Card{game.Clubs, game.Four}}, true, "unnatural"},
-		{[]game.Card{game.Card{game.Clubs, game.Two}, game.Card{game.Clubs, game.Four}, game.Card{game.Clubs, game.Four}}, true, "unnatural"},
-		{[]game.Card{game.Card{game.Clubs, game.Two}, game.Card{game.Clubs, game.Joker}, game.Card{game.Clubs, game.Seven}}, false, "unnatural with sevens"},
-		{[]game.Card{game.Card{game.Clubs, game.Five}, game.Card{game.Clubs, game.Five}, game.Card{game.Clubs, game.Three}}, false, "contains a three"},
-		{[]game.Card{game.Card{game.Clubs, game.Two}, game.Card{game.Clubs, game.Joker}, game.Card{game.Clubs, game.Joker}, game.Card{game.Clubs, game.Five}}, true, "max wildcards"},
-		{[]game.Card{game.Card{game.Clubs, game.Two}, game.Card{game.Clubs, game.Joker}, game.Card{game.Clubs, game.Joker}}, true, "wildcards meld"},
-		{[]game.Card{game.Card{game.Clubs, game.Two}, game.Card{game.Clubs, game.Joker}, game.Card{game.Clubs, game.Joker}, game.Card{game.Clubs, game.Joker}, game.Card{game.Clubs, game.Four}}, false, "too many wildcards"},
-		{[]game.Card{}, false, "no cards"},
+		{
+			name:     "natural",
+			hand:     []game.Card{game.Card{game.Clubs, game.Five}, game.Card{game.Clubs, game.Five}, game.Card{game.Clubs, game.Five}},
+			valid:    true,
+			goneDown: false,
+		},
+		{
+			hand:  []game.Card{game.Card{game.Clubs, game.Five}, game.Card{game.Clubs, game.Six}, game.Card{game.Clubs, game.Seven}},
+			valid: false,
+			name:  "mixed rank",
+		},
+		{
+			name:     "mixed rank with wildcard",
+			hand:     []game.Card{game.Card{game.Clubs, game.Joker}, game.Card{game.Clubs, game.Six}, game.Card{game.Clubs, game.Seven}},
+			valid:    false,
+			goneDown: false,
+		},
+		{
+			name:     "unnatural",
+			hand:     []game.Card{game.Card{game.Clubs, game.Two}, game.Card{game.Clubs, game.Joker}, game.Card{game.Clubs, game.Four}},
+			valid:    true,
+			goneDown: false,
+		},
+		{
+			name:     "unnatural",
+			hand:     []game.Card{game.Card{game.Clubs, game.Two}, game.Card{game.Clubs, game.Four}, game.Card{game.Clubs, game.Four}},
+			valid:    true,
+			goneDown: false,
+		},
+		{
+			name:     "unnatural with sevens",
+			hand:     []game.Card{game.Card{game.Clubs, game.Two}, game.Card{game.Clubs, game.Joker}, game.Card{game.Clubs, game.Seven}},
+			valid:    false,
+			goneDown: false,
+		},
+		{
+			name:     "contains a three",
+			hand:     []game.Card{game.Card{game.Clubs, game.Five}, game.Card{game.Clubs, game.Five}, game.Card{game.Clubs, game.Three}},
+			valid:    false,
+			goneDown: false,
+		},
+		{
+			name:     "max wildcards",
+			hand:     []game.Card{game.Card{game.Clubs, game.Two}, game.Card{game.Clubs, game.Joker}, game.Card{game.Clubs, game.Joker}, game.Card{game.Clubs, game.Five}},
+			valid:    true,
+			goneDown: false,
+		},
+		{
+			name:     "wildcards meld",
+			hand:     []game.Card{game.Card{game.Clubs, game.Two}, game.Card{game.Clubs, game.Joker}, game.Card{game.Clubs, game.Joker}},
+			valid:    true,
+			goneDown: false,
+		},
+		{
+			name:     "too many wildcards",
+			hand:     []game.Card{game.Card{game.Clubs, game.Two}, game.Card{game.Clubs, game.Joker}, game.Card{game.Clubs, game.Joker}, game.Card{game.Clubs, game.Joker}, game.Card{game.Clubs, game.Four}},
+			valid:    false,
+			goneDown: false,
+		},
+		{
+			name:     "no cards",
+			hand:     []game.Card{},
+			valid:    false,
+			goneDown: false,
+		},
 	}
+}
+
+func TestValidateMeld(t *testing.T) {
+	tests := getMeldTestScenarios()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			team := game.Team{
 				make([]game.Meld, 0),
 				make([]game.Canasta, 0),
+				false,
 			}
 			player := game.Player{
 				Name: tt.name,
@@ -65,13 +130,13 @@ func TestMakeMeld(t *testing.T) {
 			for i := range player.Hand {
 				cardsToPlay = append(cardsToPlay, i)
 			}
-			startingHandLength := len(player.Hand)
 
-			err := player.NewMeld(cardsToPlay)
+			meld, err := player.ValidateMeld(cardsToPlay)
+			meldLength := len(meld.Cards)
+			cardsPlayed := len(tt.hand)
 
-			endingHandLength := len(player.Hand)
-			if tt.valid && endingHandLength != 0 {
-				t.Errorf("Hand should be reduced by three cards, started with %d and ended with %d", startingHandLength, endingHandLength)
+			if tt.valid && cardsPlayed != meldLength {
+				t.Errorf("Meld does not match the number of cards played. %d played, %d found in meld.", cardsPlayed, meldLength)
 			}
 
 			if err != nil && tt.valid {
@@ -82,15 +147,13 @@ func TestMakeMeld(t *testing.T) {
 				t.Error("Expected error")
 			}
 
-			if tt.valid && len(team.Melds) != 1 {
-				t.Error("Should have one meld")
-				t.FailNow()
-			}
-
-			if tt.valid && !slices.Equal(tt.hand, team.Melds[0].Cards) {
-				t.Errorf("Expected Canasta matching %s got %s", tt.hand, team.Melds[0].Cards)
+			if tt.valid && !slices.Equal(tt.hand, meld.Cards) {
+				t.Errorf("Expected meld matching %s got %s", tt.hand, meld.Cards)
 			}
 		})
 	}
+}
+
+func TestNewMeld(t *testing.T) {
 
 }
