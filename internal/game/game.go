@@ -2,7 +2,7 @@ package game
 
 import (
 	"errors"
-	"sort"
+	"slices"
 )
 
 type Game struct {
@@ -28,17 +28,27 @@ type Player struct {
 	MadeCanasta  bool   `json:"madeCanasta"`
 }
 
+type HasId interface {
+	GetId() int
+}
+
 type Meld struct {
+	Id        int    `json:"id"`
 	Rank      Rank   `json:"rank"`
 	Cards     []Card `json:"cards"`
 	Unnatural bool   `json:"unnatural"`
 }
 
+func (m Meld) GetId() int { return m.Id }
+
 type Canasta struct {
+	Id    int    `json:"id"`
 	Rank  Rank   `json:"rank"`
 	Cards []Card `json:"cards"`
 	Count int    `json:"count"`
 }
+
+func (c Canasta) GetId() int { return c.Id }
 
 type Team struct {
 	Score    int       `json:"score"`
@@ -53,6 +63,15 @@ var meldRequirements = []int{
 	90,
 	120,
 	150,
+}
+
+func findIndex[T HasId](id int, slice []T) (index int, err error) {
+	for i, item := range slice {
+		if item.GetId() == id {
+			return i, nil
+		}
+	}
+	return -1, errors.New("Not found")
 }
 
 func NewGame(playerNames []string) Game {
@@ -180,16 +199,20 @@ func (g *Game) Deal() {
 	g.Hand.DiscardPile = append(g.Hand.DiscardPile, discard)
 }
 
-func (p *Player) NewMeld(cardIndexes []int) error {
-	meld, err := p.ValidateMeld(cardIndexes)
+func (p *Player) NewMeld(cardIds []int) error {
+	meld, err := p.ValidateMeld(cardIds)
 	if err != nil {
 		return err
 	}
 
 	// Cool let's do it then
 	if p.Team.GoneDown {
+		p.Hand = removeCards(p.Hand, cardIds)
 		p.Team.Melds = append(p.Team.Melds, meld)
-		p.Hand = removeCards(p.Hand, cardIndexes)
+
+		if len(meld.Cards) >= 7 {
+			p.NewCanasta(&p.Team.Melds[len(p.Team.Melds)])
+		}
 
 		return nil
 	} else {
@@ -199,8 +222,8 @@ func (p *Player) NewMeld(cardIndexes []int) error {
 	}
 }
 
-func (p *Player) ValidateMeld(cardIndexes []int) (meld Meld, err error) {
-	if len(cardIndexes) < 3 {
+func (p *Player) ValidateMeld(cardIds []int) (meld Meld, err error) {
+	if len(cardIds) < 3 {
 		return meld, errors.New("Melds require at least three cards.")
 	}
 
@@ -210,7 +233,7 @@ func (p *Player) ValidateMeld(cardIndexes []int) (meld Meld, err error) {
 	allWilds := true
 	var rank Rank
 
-	for i, handIndex := range cardIndexes {
+	for i, handIndex := range cardIds {
 		if i > 0 && !cards[i-1].IsWild() && !p.Hand[handIndex].IsWild() && p.Hand[handIndex].Rank != rank {
 			return meld, errors.New("Cannot mix rank in a meld")
 		}
@@ -244,6 +267,7 @@ func (p *Player) ValidateMeld(cardIndexes []int) (meld Meld, err error) {
 		rank = Wild
 	}
 	meld = Meld{
+		Id:        cardIds[0],
 		Rank:      rank,
 		Cards:     cards,
 		Unnatural: wildCount > 0,
@@ -252,10 +276,17 @@ func (p *Player) ValidateMeld(cardIndexes []int) (meld Meld, err error) {
 	return meld, nil
 }
 
-func (p *Player) AddToMeld(cardIndexes []int, meld *Meld) error {
+func (p *Player) AddToMeld(cardIds []int, meldId int) error {
 	var cards []Card
 
-	for _, handIndex := range cardIndexes {
+	meldIndex, err := findIndex(meldId, p.Team.Melds)
+	if err != nil {
+		return err
+	}
+
+	meld := p.Team.Melds[meldIndex]
+
+	for _, handIndex := range cardIds {
 		card := p.Hand[handIndex]
 		if card.Rank != meld.Rank && !card.IsWild() {
 			return errors.New("Card does not match this meld")
@@ -273,25 +304,25 @@ func (p *Player) AddToMeld(cardIndexes []int, meld *Meld) error {
 		cards = append(cards, p.Hand[handIndex])
 	}
 
+	meld.Cards = append(meld.Cards, cards...)
+	p.Hand = removeCards(p.Hand, cardIds)
+
 	if len(meld.Cards) >= 7 {
-		p.NewCanasta(meld)
-	} else {
-		meld.Cards = append(meld.Cards, cards...)
-		p.Hand = removeCards(p.Hand, cardIndexes)
+		p.NewCanasta(meldId)
 	}
 
 	return nil
 }
 
-func removeCards(hand []Card, indices []int) []Card {
-	sort.Sort(sort.Reverse(sort.IntSlice(indices)))
-
-	for _, i := range indices {
-		if i >= 0 && i < len(hand) {
-			hand = append(hand[:i], hand[i+1:]...)
+func removeCards(hand []Card, ids []int) []Card {
+	updatedHand := hand[:0]
+	for _, card := range hand {
+		if slices.Contains(ids, card.Id) {
+			updatedHand = append(updatedHand, card)
 		}
 	}
-	return hand
+	clear(hand[len(updatedHand):])
+	return updatedHand
 }
 
 func (g *Game) GoDown(p *Player) {

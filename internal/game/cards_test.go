@@ -12,12 +12,12 @@ func TestPointValues(t *testing.T) {
 		card game.Card
 		want int
 	}{
-		{game.Card{game.Hearts, game.Three}, 100},
-		{game.Card{game.Diamonds, game.Three}, 100},
-		{game.Card{game.Clubs, game.Three}, -100},
-		{game.Card{game.Spades, game.Three}, -100},
-		{game.Card{game.Spades, game.Ace}, 20},
-		{game.Card{game.Spades, game.Joker}, 50},
+		{game.Card{0, game.Hearts, game.Three}, 100},
+		{game.Card{0, game.Diamonds, game.Three}, 100},
+		{game.Card{0, game.Clubs, game.Three}, -100},
+		{game.Card{0, game.Spades, game.Three}, -100},
+		{game.Card{0, game.Spades, game.Ace}, 20},
+		{game.Card{0, game.Spades, game.Joker}, 50},
 	}
 
 	for _, tt := range tests {
@@ -44,9 +44,9 @@ func TestDraw(t *testing.T) {
 	drawnCards := deck.Draw(3)
 
 	expected := []game.Card{
-		{game.Clubs, game.Joker},
-		{game.Spades, game.Joker},
-		{game.Spades, game.Ace},
+		{215, game.Wild, game.Joker},
+		{214, game.Wild, game.Joker},
+		{213, game.Spades, game.Ace},
 	}
 
 	if deck.Count() != 213 {
@@ -54,8 +54,9 @@ func TestDraw(t *testing.T) {
 	}
 
 	for i, expectedCard := range expected {
-		if expectedCard.Rank != drawnCards[i].Rank || expectedCard.Suit != drawnCards[i].Suit {
-			t.Errorf("Expected to draw %s, got %s", expectedCard, drawnCards[i])
+		if expectedCard.Id != drawnCards[i].Id || expectedCard.Rank != drawnCards[i].Rank || expectedCard.Suit != drawnCards[i].Suit {
+			t.Log(drawnCards)
+			t.Errorf("Expected to draw %d: %s, got %d: %s", expectedCard.Id, expectedCard, drawnCards[i].Id, drawnCards[i])
 		}
 	}
 }

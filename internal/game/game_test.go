@@ -46,56 +46,56 @@ func getMeldTestScenarios() []struct {
 		{
 			name:  "natural",
 			rank:  game.Five,
-			hand:  []game.Card{{game.Clubs, game.Five}, {game.Clubs, game.Five}, {game.Clubs, game.Five}},
+			hand:  []game.Card{{0, game.Clubs, game.Five}, {1, game.Clubs, game.Five}, {2, game.Clubs, game.Five}},
 			valid: true,
 		},
 		{
 			name:  "mixed rank",
-			hand:  []game.Card{{game.Clubs, game.Five}, {game.Clubs, game.Six}, {game.Clubs, game.Seven}},
+			hand:  []game.Card{{0, game.Clubs, game.Five}, {1, game.Clubs, game.Six}, {2, game.Clubs, game.Seven}},
 			valid: false,
 		},
 		{
 			name:  "mixed rank with wildcard",
-			hand:  []game.Card{{game.Clubs, game.Joker}, {game.Clubs, game.Six}, {game.Clubs, game.Seven}},
+			hand:  []game.Card{{0, game.Clubs, game.Joker}, {1, game.Clubs, game.Six}, {2, game.Clubs, game.Seven}},
 			valid: false,
 		},
 		{
 			name:  "unnatural",
 			rank:  game.Four,
-			hand:  []game.Card{{game.Clubs, game.Two}, {game.Clubs, game.Joker}, {game.Clubs, game.Four}},
+			hand:  []game.Card{{0, game.Clubs, game.Two}, {1, game.Clubs, game.Joker}, {2, game.Clubs, game.Four}},
 			valid: true,
 		},
 		{
 			name:  "unnatural mixed order",
 			rank:  game.Four,
-			hand:  []game.Card{{game.Clubs, game.Two}, {game.Clubs, game.Four}, {game.Clubs, game.Four}},
+			hand:  []game.Card{{0, game.Clubs, game.Two}, {1, game.Clubs, game.Four}, {2, game.Clubs, game.Four}},
 			valid: true,
 		},
 		{
 			name:  "unnatural with sevens",
-			hand:  []game.Card{{game.Clubs, game.Two}, {game.Clubs, game.Joker}, {game.Clubs, game.Seven}},
+			hand:  []game.Card{{0, game.Clubs, game.Two}, {1, game.Clubs, game.Joker}, {2, game.Clubs, game.Seven}},
 			valid: false,
 		},
 		{
 			name:  "contains a three",
-			hand:  []game.Card{{game.Clubs, game.Five}, {game.Clubs, game.Five}, {game.Clubs, game.Three}},
+			hand:  []game.Card{{0, game.Clubs, game.Five}, {1, game.Clubs, game.Five}, {2, game.Clubs, game.Three}},
 			valid: false,
 		},
 		{
 			name:  "max wildcards",
 			rank:  game.Five,
-			hand:  []game.Card{{game.Clubs, game.Two}, {game.Clubs, game.Joker}, {game.Clubs, game.Joker}, {game.Clubs, game.Five}},
+			hand:  []game.Card{{0, game.Clubs, game.Two}, {1, game.Clubs, game.Joker}, {2, game.Clubs, game.Joker}, {3, game.Clubs, game.Five}},
 			valid: true,
 		},
 		{
 			name:  "wildcards meld",
 			rank:  game.Wild,
-			hand:  []game.Card{{game.Clubs, game.Two}, {game.Clubs, game.Joker}, {game.Clubs, game.Joker}},
+			hand:  []game.Card{{0, game.Clubs, game.Two}, {1, game.Clubs, game.Joker}, {2, game.Clubs, game.Joker}},
 			valid: true,
 		},
 		{
 			name:  "too many wildcards",
-			hand:  []game.Card{{game.Clubs, game.Two}, {game.Clubs, game.Joker}, {game.Clubs, game.Joker}, {game.Clubs, game.Joker}, {game.Clubs, game.Four}},
+			hand:  []game.Card{{0, game.Clubs, game.Two}, {1, game.Clubs, game.Joker}, {2, game.Clubs, game.Joker}, {3, game.Clubs, game.Joker}, {4, game.Clubs, game.Four}},
 			valid: false,
 		},
 		{
@@ -203,15 +203,16 @@ func TestAddToMeld(t *testing.T) {
 		{
 			name: "natural",
 			hand: []game.Card{
-				{game.Hearts, game.Queen},
+				{3, game.Hearts, game.Queen},
 			},
 			add: []int{0},
 			meld: game.Meld{
+				Id:   0,
 				Rank: game.Queen,
 				Cards: []game.Card{
-					{game.Hearts, game.Queen},
-					{game.Spades, game.Queen},
-					{game.Diamonds, game.Queen},
+					{0, game.Hearts, game.Queen},
+					{1, game.Spades, game.Queen},
+					{2, game.Diamonds, game.Queen},
 				},
 			},
 			valid: true,
@@ -219,15 +220,16 @@ func TestAddToMeld(t *testing.T) {
 		{
 			name: "making it unnatural",
 			hand: []game.Card{
-				{game.Hearts, game.Joker},
+				{3, game.Hearts, game.Joker},
 			},
 			add: []int{0},
 			meld: game.Meld{
+				Id:   0,
 				Rank: game.Queen,
 				Cards: []game.Card{
-					{game.Hearts, game.Queen},
-					{game.Spades, game.Queen},
-					{game.Diamonds, game.Queen},
+					{0, game.Hearts, game.Queen},
+					{1, game.Spades, game.Queen},
+					{2, game.Diamonds, game.Queen},
 				},
 			},
 			valid: true,
@@ -235,15 +237,16 @@ func TestAddToMeld(t *testing.T) {
 		{
 			name: "wrong card on a meld",
 			hand: []game.Card{
-				{game.Hearts, game.King},
+				{3, game.Hearts, game.King},
 			},
 			add: []int{0},
 			meld: game.Meld{
+				Id:   0,
 				Rank: game.Ten,
 				Cards: []game.Card{
-					{game.Hearts, game.Ten},
-					{game.Spades, game.Ten},
-					{game.Diamonds, game.Ten},
+					{0, game.Hearts, game.Ten},
+					{1, game.Spades, game.Ten},
+					{2, game.Diamonds, game.Ten},
 				},
 			},
 			valid: false,
@@ -251,15 +254,16 @@ func TestAddToMeld(t *testing.T) {
 		{
 			name: "unnatural on sevens",
 			hand: []game.Card{
-				{game.Hearts, game.Joker},
+				{3, game.Wild, game.Joker},
 			},
 			add: []int{0},
 			meld: game.Meld{
+				Id:   0,
 				Rank: game.Seven,
 				Cards: []game.Card{
-					{game.Hearts, game.Seven},
-					{game.Spades, game.Seven},
-					{game.Diamonds, game.Seven},
+					{0, game.Hearts, game.Seven},
+					{1, game.Spades, game.Seven},
+					{3, game.Diamonds, game.Seven},
 				},
 			},
 			valid: false,
@@ -267,15 +271,16 @@ func TestAddToMeld(t *testing.T) {
 		{
 			name: "playing a three",
 			hand: []game.Card{
-				{game.Spades, game.Three},
+				{3, game.Spades, game.Three},
 			},
 			add: []int{0},
 			meld: game.Meld{
+				Id:   0,
 				Rank: game.Seven,
 				Cards: []game.Card{
-					{game.Hearts, game.Queen},
-					{game.Spades, game.Queen},
-					{game.Diamonds, game.Queen},
+					{0, game.Hearts, game.Queen},
+					{1, game.Spades, game.Queen},
+					{2, game.Diamonds, game.Queen},
 				},
 			},
 			valid: false,
@@ -290,7 +295,7 @@ func TestAddToMeld(t *testing.T) {
 			player.Hand = append(player.Hand, tt.hand...)
 			player.Team.Melds = append(player.Team.Melds, tt.meld)
 
-			err := player.AddToMeld(tt.add, &game.TeamA.Melds[0])
+			err := player.AddToMeld(tt.add, game.TeamA.Melds[0].Id)
 
 			if tt.valid && err != nil {
 				t.Log(err)
@@ -336,18 +341,82 @@ func TestAddToMeldCreatesACanasta(t *testing.T) {
 		{
 			name: "natural",
 			hand: []game.Card{
-				{game.Hearts, game.Queen},
+				{0, game.Hearts, game.Queen},
 			},
 			add: []int{0},
 			meld: game.Meld{
+				Id:   0,
 				Rank: game.Queen,
 				Cards: []game.Card{
-					{game.Hearts, game.Queen},
-					{game.Spades, game.Queen},
-					{game.Diamonds, game.Queen},
+					{1, game.Hearts, game.Queen},
+					{2, game.Spades, game.Queen},
+					{3, game.Spades, game.Queen},
+					{4, game.Diamonds, game.Queen},
+					{5, game.Diamonds, game.Queen},
+					{6, game.Diamonds, game.Queen},
 				},
 			},
 			valid: true,
+		},
+		{
+			name: "unnatural",
+			hand: []game.Card{
+				{0, game.Hearts, game.Queen},
+			},
+			add: []int{0},
+			meld: game.Meld{
+				Id:   0,
+				Rank: game.Queen,
+				Cards: []game.Card{
+					{1, game.Hearts, game.Queen},
+					{2, game.Hearts, game.Queen},
+					{3, game.Spades, game.Two},
+					{4, game.Spades, game.Two},
+					{5, game.Diamonds, game.Queen},
+					{6, game.Diamonds, game.Queen},
+				},
+			},
+			valid: true,
+		},
+		{
+			name: "finish with wildcard",
+			hand: []game.Card{
+				{0, game.Hearts, game.Two},
+			},
+			add: []int{0},
+			meld: game.Meld{
+				Id:   0,
+				Rank: game.Queen,
+				Cards: []game.Card{
+					{1, game.Hearts, game.Queen},
+					{2, game.Hearts, game.Queen},
+					{3, game.Diamonds, game.Queen},
+					{4, game.Diamonds, game.Queen},
+					{5, game.Spades, game.Queen},
+					{6, game.Spades, game.Queen},
+				},
+			},
+			valid: true,
+		},
+		{
+			name: "try to finish with too many wilds",
+			hand: []game.Card{
+				{0, game.Hearts, game.Two},
+			},
+			add: []int{0},
+			meld: game.Meld{
+				Id:   0,
+				Rank: game.Queen,
+				Cards: []game.Card{
+					{1, game.Hearts, game.Two},
+					{2, game.Hearts, game.Two},
+					{3, game.Hearts, game.Two},
+					{4, game.Diamonds, game.Queen},
+					{5, game.Spades, game.Queen},
+					{6, game.Spades, game.Queen},
+				},
+			},
+			valid: false,
 		},
 	}
 
@@ -359,7 +428,7 @@ func TestAddToMeldCreatesACanasta(t *testing.T) {
 			player.Hand = append(player.Hand, tt.hand...)
 			player.Team.Melds = append(player.Team.Melds, tt.meld)
 
-			err := player.AddToMeld(tt.add, &game.TeamA.Melds[0])
+			err := player.AddToMeld(tt.add, game.TeamA.Melds[0].Id)
 
 			if tt.valid && err != nil {
 				t.Log(err)
@@ -380,6 +449,31 @@ func TestAddToMeldCreatesACanasta(t *testing.T) {
 
 		})
 	}
+}
+
+func TestAddSevenCardsToMeld(t *testing.T) {
+	// {
+	// 	name: "all seven at once",
+	// 	hand: []game.Card{
+	// 		{game.Hearts, game.Five},
+	// 		{game.Hearts, game.Five},
+	// 		{game.Diamonds, game.Five},
+	// 		{game.Diamonds, game.Five},
+	// 		{game.Diamonds, game.Five},
+	// 		{game.Spades, game.Five},
+	// 		{game.Spades, game.Five},
+	// 	},
+	// 	add: []int{0},
+	// 	meld: game.Meld{
+	// 		Rank: game.Queen,
+	// 		Cards: []game.Card{
+	// 			{game.Hearts, game.Queen},
+	// 			{game.Spades, game.Two},
+	// 			{game.Diamonds, game.Queen},
+	// 		},
+	// 	},
+	// 	valid: true,
+	// },
 }
 
 func TestCanDiscard(t *testing.T) {

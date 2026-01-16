@@ -89,9 +89,12 @@ func (r Rank) String() string {
 }
 
 type Card struct {
+	Id   int  `json:"id"`
 	Suit Suit `json:"suit"`
 	Rank Rank `json:"rank"`
 }
+
+func (c Card) GetId() int { return c.Id }
 
 func (card Card) Value() int {
 	if card.Rank == Three && card.Suit.isBlack() {
@@ -131,14 +134,18 @@ func NewDeck() *Deck {
 	ranks := []Rank{Two, Three, Four, Five, Six, Seven, Eight, Nine, Ten, Jack, Queen, King, Ace}
 	suits := []Suit{Hearts, Diamonds, Clubs, Spades}
 
+	id := 0
 	for range 4 {
 		for _, suit := range suits {
 			for _, rank := range ranks {
-				deck = append(deck, Card{suit, rank})
+				deck = append(deck, Card{id, suit, rank})
+				id++
 			}
 		}
-		deck = append(deck, Card{Spades, Joker})
-		deck = append(deck, Card{Clubs, Joker})
+		deck = append(deck, Card{id, Wild, Joker})
+		id++
+		deck = append(deck, Card{id, Wild, Joker})
+		id++
 	}
 
 	return &Deck{deck}
