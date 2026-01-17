@@ -1,8 +1,7 @@
-package game
+package canasta
 
 import (
 	"errors"
-	"fmt"
 	"slices"
 )
 
@@ -306,7 +305,6 @@ func (p *Player) AddToMeld(cardIds []int, meldId int) error {
 
 		if card.IsWild() {
 			meld.WildCount++
-			fmt.Println(meld.WildCount)
 			if meld.WildCount > 3 {
 				return errors.New("Cannot add more wildcards to this Meld")
 			}
@@ -368,7 +366,6 @@ func (g *Game) Discard(p *Player, cardId int) error {
 	g.Hand.DiscardPile = append(g.Hand.DiscardPile, card)
 
 	if p.Team.CanGoOut && len(p.Hand) == 0 {
-		fmt.Println("heremf")
 		g.EndHand()
 	}
 

@@ -1,4 +1,4 @@
-package game
+package canasta
 
 import (
 	"fmt"

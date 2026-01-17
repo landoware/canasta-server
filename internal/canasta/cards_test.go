@@ -1,7 +1,7 @@
-package game_test
+package canasta_test
 
 import (
-	"canasta-server/internal/game"
+	"canasta-server/internal/canasta"
 	"fmt"
 	"slices"
 	"testing"
@@ -9,15 +9,15 @@ import (
 
 func TestPointValues(t *testing.T) {
 	var tests = []struct {
-		card game.Card
+		card canasta.Card
 		want int
 	}{
-		{game.Card{0, game.Hearts, game.Three}, 100},
-		{game.Card{0, game.Diamonds, game.Three}, 100},
-		{game.Card{0, game.Clubs, game.Three}, -100},
-		{game.Card{0, game.Spades, game.Three}, -100},
-		{game.Card{0, game.Spades, game.Ace}, 20},
-		{game.Card{0, game.Spades, game.Joker}, 50},
+		{canasta.Card{0, canasta.Hearts, canasta.Three}, 100},
+		{canasta.Card{0, canasta.Diamonds, canasta.Three}, 100},
+		{canasta.Card{0, canasta.Clubs, canasta.Three}, -100},
+		{canasta.Card{0, canasta.Spades, canasta.Three}, -100},
+		{canasta.Card{0, canasta.Spades, canasta.Ace}, 20},
+		{canasta.Card{0, canasta.Spades, canasta.Joker}, 50},
 	}
 
 	for _, tt := range tests {
@@ -32,7 +32,7 @@ func TestPointValues(t *testing.T) {
 }
 
 func TestBuildDeck(t *testing.T) {
-	deck := game.NewDeck()
+	deck := canasta.NewDeck()
 
 	if deck.Count() != 4*54 {
 		t.Errorf("Deck should be %d cards, %d given.", 54*4, deck.Count())
@@ -40,13 +40,13 @@ func TestBuildDeck(t *testing.T) {
 }
 
 func TestDraw(t *testing.T) {
-	deck := game.NewDeck()
+	deck := canasta.NewDeck()
 	drawnCards := deck.Draw(3)
 
-	expected := []game.Card{
-		{215, game.Wild, game.Joker},
-		{214, game.Wild, game.Joker},
-		{213, game.Spades, game.Ace},
+	expected := []canasta.Card{
+		{215, canasta.Wild, canasta.Joker},
+		{214, canasta.Wild, canasta.Joker},
+		{213, canasta.Spades, canasta.Ace},
 	}
 
 	if deck.Count() != 213 {
@@ -62,8 +62,8 @@ func TestDraw(t *testing.T) {
 }
 
 func TestShuffle(t *testing.T) {
-	deckA := game.NewDeck()
-	deckB := game.NewDeck()
+	deckA := canasta.NewDeck()
+	deckB := canasta.NewDeck()
 
 	if !slices.Equal(deckA.Cards, deckB.Cards) {
 		t.Error("Your decks aren't equal to start")
