@@ -684,6 +684,87 @@ func TestCanDiscard(t *testing.T) {
 }
 
 func TestDiscard(t *testing.T) {
+	tests := []struct {
+		name          string
+		hand          []game.Card
+		discardedCard int
+		canGoOut      bool
+		valid         bool
+	}{
+		{
+			name: "normal discard",
+			hand: []game.Card{
+				{0, game.Clubs, game.Ace},
+				{1, game.Clubs, game.Three},
+			},
+			discardedCard: 1,
+			canGoOut:      false,
+			valid:         true,
+		},
+		{
+			name: "going out",
+			hand: []game.Card{
+				{1, game.Clubs, game.Three},
+			},
+			discardedCard: 1,
+			canGoOut:      true,
+			valid:         true,
+		},
+		{
+			name: "going out too early",
+			hand: []game.Card{
+				{1, game.Clubs, game.Three},
+			},
+			discardedCard: 1,
+			canGoOut:      false,
+			valid:         false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gameObj := game.NewGame([]string{"A", "B", "C", "D"})
+
+			hand := make(game.PlayerHand)
+			for _, card := range tt.hand {
+				hand[card.GetId()] = card
+			}
+
+			player := gameObj.Players[0]
+			player.Hand = hand
+			player.Team.CanGoOut = tt.canGoOut
+
+			err := gameObj.Discard(player, tt.discardedCard)
+
+			if tt.valid && err != nil {
+				t.Log(err)
+				t.FailNow()
+			}
+			if !tt.valid && err == nil {
+				t.Log("expected error")
+				t.FailNow()
+			}
+
+			if tt.valid && len(player.Hand) != len(tt.hand)-1 && gameObj.HandNumber == 1 {
+				t.Log(gameObj.HandNumber)
+				t.Log(player.Hand)
+				t.Error("Expected card to be discarded from hand")
+			}
+
+			if tt.valid && len(gameObj.Hand.DiscardPile) < 1 {
+				t.Log(gameObj.Hand.DiscardPile)
+				t.Error("Expected additional card in the discard pile")
+			}
+
+			if !tt.valid && len(gameObj.Hand.DiscardPile) > 1 {
+				t.Log(gameObj.Hand.DiscardPile)
+				t.Error("Unexpected discard")
+			}
+		})
+	}
+}
+
+func TestAddToStagingMeld(t *testing.T) {
 
 }
 

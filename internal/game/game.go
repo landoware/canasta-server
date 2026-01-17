@@ -129,11 +129,12 @@ func NewGame(playerNames []string) Game {
 	}
 }
 
-func (g Game) EndHand() {
+func (g *Game) EndHand() {
+	g.HandNumber++
 	// Score here?
 	g.Score()
 
-	if g.HandNumber == 3 {
+	if g.HandNumber == 4 {
 		g.EndGame()
 	}
 
@@ -141,7 +142,7 @@ func (g Game) EndHand() {
 
 }
 
-func (g Game) NewHand() {
+func (g *Game) NewHand() {
 	// Reset the player states
 	for _, player := range g.Players {
 		clear(player.Hand)
@@ -165,8 +166,6 @@ func (g Game) NewHand() {
 	hand.Deck.Shuffle()
 
 	g.Deal()
-
-	g.HandNumber++
 }
 
 func (g Game) Score() {
@@ -367,6 +366,11 @@ func (g *Game) Discard(p *Player, cardId int) error {
 	card := p.Hand[cardId]
 	p.Hand.removeCards([]int{cardId})
 	g.Hand.DiscardPile = append(g.Hand.DiscardPile, card)
+
+	if p.Team.CanGoOut && len(p.Hand) == 0 {
+		fmt.Println("heremf")
+		g.EndHand()
+	}
 
 	return nil
 }
