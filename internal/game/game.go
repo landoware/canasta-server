@@ -2,6 +2,7 @@ package game
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 )
 
@@ -20,13 +21,15 @@ type Hand struct {
 }
 
 type Player struct {
-	Name         string `json:"name"`
-	Team         *Team  `json:"team"`
-	Hand         []Card `json:"hand"`
-	Foot         []Card `json:"foot"`
-	StagingMelds []Meld `json:"stagingMelds"`
-	MadeCanasta  bool   `json:"madeCanasta"`
+	Name         string     `json:"name"`
+	Team         *Team      `json:"team"`
+	Hand         PlayerHand `json:"hand"`
+	Foot         []Card     `json:"foot"`
+	StagingMelds []Meld     `json:"stagingMelds"`
+	MadeCanasta  bool       `json:"madeCanasta"`
 }
+
+type PlayerHand map[int]Card
 
 type HasId interface {
 	GetId() int
@@ -36,7 +39,7 @@ type Meld struct {
 	Id        int    `json:"id"`
 	Rank      Rank   `json:"rank"`
 	Cards     []Card `json:"cards"`
-	Unnatural bool   `json:"unnatural"`
+	WildCount int    `json:"wildCount"`
 }
 
 func (m Meld) GetId() int { return m.Id }
@@ -96,14 +99,14 @@ func NewGame(playerNames []string) Game {
 			players = append(players, &Player{
 				Name: playerName,
 				Team: &teamA,
-				Hand: make([]Card, 0),
+				Hand: make(map[int]Card, 0),
 				Foot: make([]Card, 0),
 			})
 		} else {
 			players = append(players, &Player{
 				Name: playerName,
 				Team: &teamB,
-				Hand: make([]Card, 0),
+				Hand: make(map[int]Card, 0),
 				Foot: make([]Card, 0),
 			})
 		}
@@ -141,7 +144,7 @@ func (g Game) EndHand() {
 func (g Game) NewHand() {
 	// Reset the player states
 	for _, player := range g.Players {
-		player.Hand = make([]Card, 0)
+		clear(player.Hand)
 		player.Foot = make([]Card, 0)
 		player.StagingMelds = make([]Meld, 0)
 		player.MadeCanasta = false
@@ -183,7 +186,7 @@ func (g *Game) Deal() {
 	for range 15 {
 		for _, player := range g.Players {
 			card := g.Hand.Deck.Draw(1)[0]
-			player.Hand = append(player.Hand, card)
+			player.Hand[card.GetId()] = card
 		}
 	}
 
@@ -207,12 +210,12 @@ func (p *Player) NewMeld(cardIds []int) error {
 
 	// Cool let's do it then
 	if p.Team.GoneDown {
-		p.Hand = removeCards(p.Hand, cardIds)
+		p.Hand.removeCards(cardIds)
 		p.Team.Melds = append(p.Team.Melds, meld)
 
-		if len(meld.Cards) >= 7 {
-			p.NewCanasta(&p.Team.Melds[len(p.Team.Melds)])
-		}
+		// if len(meld.Cards) >= 7 {
+		// 	p.NewCanasta(&p.Team.Melds[len(p.Team.Melds)])
+		// }
 
 		return nil
 	} else {
@@ -233,23 +236,27 @@ func (p *Player) ValidateMeld(cardIds []int) (meld Meld, err error) {
 	allWilds := true
 	var rank Rank
 
-	for i, handIndex := range cardIds {
-		if i > 0 && !cards[i-1].IsWild() && !p.Hand[handIndex].IsWild() && p.Hand[handIndex].Rank != rank {
-			return meld, errors.New("Cannot mix rank in a meld")
-		}
-
-		// Keep track of Rank
-		if !p.Hand[handIndex].IsWild() {
-			rank = p.Hand[handIndex].Rank
-			allWilds = false
-		}
+	for _, handIndex := range cardIds {
+		card := p.Hand[handIndex]
 
 		// Can't use a three for a canasta
-		if p.Hand[handIndex].Rank == Three {
+		if card.Rank == Three {
 			return meld, errors.New("Cannot use threes in melds")
 		}
 
-		cards = append(cards, p.Hand[handIndex])
+		// Set the rank based on the first non-wild
+		if !card.IsWild() {
+			if allWilds {
+				rank = card.Rank
+				allWilds = false
+			} else {
+				if card.Rank != rank {
+					return meld, errors.New("Cannot mix rank in a meld")
+				}
+			}
+		}
+
+		cards = append(cards, card)
 	}
 
 	wildCount := WildCount(cards)
@@ -260,7 +267,7 @@ func (p *Player) ValidateMeld(cardIds []int) (meld Meld, err error) {
 
 	// Can't have majority wildcards
 	if !allWilds && wildCount > 3 {
-		return meld, errors.New("Cannot use more than three wildcards in an unnatural Canasta")
+		return meld, errors.New("Cannot use more than three wildcards in an unnatural meld")
 	}
 
 	if allWilds {
@@ -270,7 +277,7 @@ func (p *Player) ValidateMeld(cardIds []int) (meld Meld, err error) {
 		Id:        cardIds[0],
 		Rank:      rank,
 		Cards:     cards,
-		Unnatural: wildCount > 0,
+		WildCount: wildCount,
 	}
 
 	return meld, nil
@@ -284,7 +291,7 @@ func (p *Player) AddToMeld(cardIds []int, meldId int) error {
 		return err
 	}
 
-	meld := p.Team.Melds[meldIndex]
+	meld := &p.Team.Melds[meldIndex]
 
 	for _, handIndex := range cardIds {
 		card := p.Hand[handIndex]
@@ -299,38 +306,49 @@ func (p *Player) AddToMeld(cardIds []int, meldId int) error {
 		}
 
 		if card.IsWild() {
-			meld.Unnatural = true
+			meld.WildCount++
+			fmt.Println(meld.WildCount)
+			if meld.WildCount > 3 {
+				return errors.New("Cannot add more wildcards to this Meld")
+			}
 		}
 		cards = append(cards, p.Hand[handIndex])
 	}
 
 	meld.Cards = append(meld.Cards, cards...)
-	p.Hand = removeCards(p.Hand, cardIds)
+	p.Hand.removeCards(cardIds)
 
 	if len(meld.Cards) >= 7 {
-		p.NewCanasta(meldId)
+		p.NewCanasta(meldIndex)
 	}
 
 	return nil
 }
 
-func removeCards(hand []Card, ids []int) []Card {
-	updatedHand := hand[:0]
-	for _, card := range hand {
-		if slices.Contains(ids, card.Id) {
-			updatedHand = append(updatedHand, card)
-		}
+func (h *PlayerHand) removeCards(ids []int) {
+	for _, id := range ids {
+		delete(*h, id)
 	}
-	clear(hand[len(updatedHand):])
-	return updatedHand
 }
 
 func (g *Game) GoDown(p *Player) {
+	// Handle a player having 7+ cards in a staging meld
 
 }
 
-func (p *Player) NewCanasta(meld *Meld) {
+func (p *Player) NewCanasta(meldIndex int) {
 
+	meld := p.Team.Melds[meldIndex]
+
+	p.Team.Canastas = append(p.Team.Canastas, Canasta{
+		Rank:  meld.Rank,
+		Cards: meld.Cards,
+		Count: len(meld.Cards),
+	})
+
+	remainingMelds := slices.Delete(p.Team.Melds, meldIndex, meldIndex+1)
+
+	p.Team.Melds = remainingMelds
 }
 
 func (p *Player) BurnCard(canastaId int) {
@@ -346,8 +364,9 @@ func (g *Game) Discard(p *Player, cardId int) error {
 		}
 	}
 
-	discard := removeCards(p.Hand, []int{cardId})
-	g.Hand.DiscardPile = append(g.Hand.DiscardPile, discard[0])
+	card := p.Hand[cardId]
+	p.Hand.removeCards([]int{cardId})
+	g.Hand.DiscardPile = append(g.Hand.DiscardPile, card)
 
 	return nil
 }

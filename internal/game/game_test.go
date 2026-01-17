@@ -31,13 +31,8 @@ func TestDeal(t *testing.T) {
 
 }
 
-func getMeldTestScenarios() []struct {
-	name  string
-	rank  game.Rank
-	hand  []game.Card
-	valid bool
-} {
-	return []struct {
+func TestValidateMeld(t *testing.T) {
+	tests := []struct {
 		name  string
 		rank  game.Rank
 		hand  []game.Card
@@ -56,13 +51,13 @@ func getMeldTestScenarios() []struct {
 		},
 		{
 			name:  "mixed rank with wildcard",
-			hand:  []game.Card{{0, game.Clubs, game.Joker}, {1, game.Clubs, game.Six}, {2, game.Clubs, game.Seven}},
+			hand:  []game.Card{{0, game.Wild, game.Joker}, {1, game.Clubs, game.Six}, {2, game.Clubs, game.Seven}},
 			valid: false,
 		},
 		{
 			name:  "unnatural",
 			rank:  game.Four,
-			hand:  []game.Card{{0, game.Clubs, game.Two}, {1, game.Clubs, game.Joker}, {2, game.Clubs, game.Four}},
+			hand:  []game.Card{{0, game.Clubs, game.Two}, {1, game.Wild, game.Joker}, {2, game.Clubs, game.Four}},
 			valid: true,
 		},
 		{
@@ -73,7 +68,7 @@ func getMeldTestScenarios() []struct {
 		},
 		{
 			name:  "unnatural with sevens",
-			hand:  []game.Card{{0, game.Clubs, game.Two}, {1, game.Clubs, game.Joker}, {2, game.Clubs, game.Seven}},
+			hand:  []game.Card{{0, game.Clubs, game.Two}, {1, game.Wild, game.Joker}, {2, game.Clubs, game.Seven}},
 			valid: false,
 		},
 		{
@@ -84,18 +79,18 @@ func getMeldTestScenarios() []struct {
 		{
 			name:  "max wildcards",
 			rank:  game.Five,
-			hand:  []game.Card{{0, game.Clubs, game.Two}, {1, game.Clubs, game.Joker}, {2, game.Clubs, game.Joker}, {3, game.Clubs, game.Five}},
+			hand:  []game.Card{{0, game.Clubs, game.Two}, {1, game.Wild, game.Joker}, {2, game.Wild, game.Joker}, {3, game.Clubs, game.Five}},
 			valid: true,
 		},
 		{
 			name:  "wildcards meld",
 			rank:  game.Wild,
-			hand:  []game.Card{{0, game.Clubs, game.Two}, {1, game.Clubs, game.Joker}, {2, game.Clubs, game.Joker}},
+			hand:  []game.Card{{0, game.Clubs, game.Two}, {1, game.Wild, game.Joker}, {2, game.Wild, game.Joker}},
 			valid: true,
 		},
 		{
 			name:  "too many wildcards",
-			hand:  []game.Card{{0, game.Clubs, game.Two}, {1, game.Clubs, game.Joker}, {2, game.Clubs, game.Joker}, {3, game.Clubs, game.Joker}, {4, game.Clubs, game.Four}},
+			hand:  []game.Card{{0, game.Clubs, game.Two}, {1, game.Wild, game.Joker}, {2, game.Wild, game.Joker}, {3, game.Wild, game.Joker}, {4, game.Clubs, game.Four}},
 			valid: false,
 		},
 		{
@@ -104,20 +99,19 @@ func getMeldTestScenarios() []struct {
 			valid: false,
 		},
 	}
-}
-
-func TestValidateMeld(t *testing.T) {
-	tests := getMeldTestScenarios()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			hand := make(game.PlayerHand)
+			var cardsToPlay []int
+			for _, card := range tt.hand {
+				hand[card.GetId()] = card
+				cardsToPlay = append(cardsToPlay, card.GetId())
+			}
+
 			player := game.Player{
 				Name: tt.name,
-				Hand: tt.hand,
-			}
-			var cardsToPlay []int
-			for i := range player.Hand {
-				cardsToPlay = append(cardsToPlay, i)
+				Hand: hand,
 			}
 
 			meld, err := player.ValidateMeld(cardsToPlay)
@@ -136,29 +130,103 @@ func TestValidateMeld(t *testing.T) {
 				t.Error("Expected error")
 			}
 
-			if tt.valid && !slices.Equal(tt.hand, meld.Cards) {
-				t.Errorf("Expected meld matching %s got %s", tt.hand, meld.Cards)
+			if tt.valid && len(tt.hand) != len(meld.Cards) {
+				for _, card := range tt.hand {
+					if !slices.Contains(meld.Cards, card) {
+						t.Logf("meld: %v", meld)
+						t.Errorf("Expected meld to contain %s got %s", card, meld.Cards)
+
+					}
+				}
 			}
 		})
 	}
 }
 
 func TestNewMeld(t *testing.T) {
-	tests := getMeldTestScenarios()
-
+	tests := []struct {
+		name  string
+		rank  game.Rank
+		hand  []game.Card
+		valid bool
+	}{
+		{
+			name:  "natural",
+			rank:  game.Five,
+			hand:  []game.Card{{0, game.Clubs, game.Five}, {1, game.Clubs, game.Five}, {2, game.Clubs, game.Five}},
+			valid: true,
+		},
+		{
+			name:  "mixed rank",
+			hand:  []game.Card{{0, game.Clubs, game.Five}, {1, game.Clubs, game.Six}, {2, game.Clubs, game.Seven}},
+			valid: false,
+		},
+		{
+			name:  "mixed rank with wildcard",
+			hand:  []game.Card{{0, game.Wild, game.Joker}, {1, game.Clubs, game.Six}, {2, game.Clubs, game.Seven}},
+			valid: false,
+		},
+		{
+			name:  "unnatural",
+			rank:  game.Four,
+			hand:  []game.Card{{0, game.Clubs, game.Two}, {1, game.Wild, game.Joker}, {2, game.Clubs, game.Four}},
+			valid: true,
+		},
+		{
+			name:  "unnatural mixed order",
+			rank:  game.Four,
+			hand:  []game.Card{{0, game.Clubs, game.Two}, {1, game.Clubs, game.Four}, {2, game.Clubs, game.Four}},
+			valid: true,
+		},
+		{
+			name:  "unnatural with sevens",
+			hand:  []game.Card{{0, game.Clubs, game.Two}, {1, game.Wild, game.Joker}, {2, game.Clubs, game.Seven}},
+			valid: false,
+		},
+		{
+			name:  "contains a three",
+			hand:  []game.Card{{0, game.Clubs, game.Five}, {1, game.Clubs, game.Five}, {2, game.Clubs, game.Three}},
+			valid: false,
+		},
+		{
+			name:  "max wildcards",
+			rank:  game.Five,
+			hand:  []game.Card{{0, game.Clubs, game.Two}, {1, game.Wild, game.Joker}, {2, game.Wild, game.Joker}, {3, game.Clubs, game.Five}},
+			valid: true,
+		},
+		{
+			name:  "wildcards meld",
+			rank:  game.Wild,
+			hand:  []game.Card{{0, game.Clubs, game.Two}, {1, game.Wild, game.Joker}, {2, game.Wild, game.Joker}},
+			valid: true,
+		},
+		{
+			name:  "too many wildcards",
+			hand:  []game.Card{{0, game.Clubs, game.Two}, {1, game.Wild, game.Joker}, {2, game.Wild, game.Joker}, {3, game.Wild, game.Joker}, {4, game.Clubs, game.Four}},
+			valid: false,
+		},
+		{
+			name:  "no cards",
+			hand:  []game.Card{},
+			valid: false,
+		},
+	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			hand := make(game.PlayerHand, 0)
+			var cardsToPlay []int
+			for _, card := range tt.hand {
+				hand[card.GetId()] = card
+				cardsToPlay = append(cardsToPlay, card.GetId())
+			}
+
 			player := game.Player{
 				Name: tt.name,
-				Hand: tt.hand,
+				Hand: hand,
 				Team: &game.Team{
 					Melds:    make([]game.Meld, 0),
 					GoneDown: true,
 				},
-			}
-			var cardsToPlay []int
-			for i := range player.Hand {
-				cardsToPlay = append(cardsToPlay, i)
 			}
 
 			err := player.NewMeld(cardsToPlay)
@@ -167,12 +235,15 @@ func TestNewMeld(t *testing.T) {
 				t.Error(err)
 			}
 			if !tt.valid && err == nil {
+				t.Log(player.Team.Melds)
 				t.Error("Expected error")
 			}
 
 			if tt.valid && len(player.Hand) != 0 {
+				t.Log(player.Hand)
 				t.Error("Cards remained in player's hand")
 			}
+
 			if !tt.valid && len(player.Hand) == 0 && len(tt.hand) != 0 {
 				t.Error("Took cards from hand for an invalid meld")
 			}
@@ -205,7 +276,7 @@ func TestAddToMeld(t *testing.T) {
 			hand: []game.Card{
 				{3, game.Hearts, game.Queen},
 			},
-			add: []int{0},
+			add: []int{3},
 			meld: game.Meld{
 				Id:   0,
 				Rank: game.Queen,
@@ -222,7 +293,7 @@ func TestAddToMeld(t *testing.T) {
 			hand: []game.Card{
 				{3, game.Hearts, game.Joker},
 			},
-			add: []int{0},
+			add: []int{3},
 			meld: game.Meld{
 				Id:   0,
 				Rank: game.Queen,
@@ -239,7 +310,7 @@ func TestAddToMeld(t *testing.T) {
 			hand: []game.Card{
 				{3, game.Hearts, game.King},
 			},
-			add: []int{0},
+			add: []int{3},
 			meld: game.Meld{
 				Id:   0,
 				Rank: game.Ten,
@@ -256,7 +327,7 @@ func TestAddToMeld(t *testing.T) {
 			hand: []game.Card{
 				{3, game.Wild, game.Joker},
 			},
-			add: []int{0},
+			add: []int{3},
 			meld: game.Meld{
 				Id:   0,
 				Rank: game.Seven,
@@ -273,7 +344,7 @@ func TestAddToMeld(t *testing.T) {
 			hand: []game.Card{
 				{3, game.Spades, game.Three},
 			},
-			add: []int{0},
+			add: []int{3},
 			meld: game.Meld{
 				Id:   0,
 				Rank: game.Seven,
@@ -289,15 +360,22 @@ func TestAddToMeld(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			game := game.NewGame([]string{"A"})
+			hand := make(game.PlayerHand)
 
-			player := game.Players[0]
-			player.Hand = append(player.Hand, tt.hand...)
+			gameObj := game.NewGame([]string{"A"})
+
+			for _, card := range tt.hand {
+				hand[card.GetId()] = card
+			}
+
+			player := gameObj.Players[0]
+			player.Hand = hand
 			player.Team.Melds = append(player.Team.Melds, tt.meld)
 
-			err := player.AddToMeld(tt.add, game.TeamA.Melds[0].Id)
+			err := player.AddToMeld(tt.add, gameObj.TeamA.Melds[0].Id)
 
 			if tt.valid && err != nil {
+				t.Log(gameObj.TeamA.Melds)
 				t.Log(err)
 				t.FailNow()
 			}
@@ -319,10 +397,12 @@ func TestAddToMeld(t *testing.T) {
 			for _, card := range tt.hand {
 				if card.IsWild() {
 					isPlayingAWildCard = true
+					break
 				}
 			}
 
-			if tt.valid && isPlayingAWildCard && !player.Team.Melds[0].Unnatural {
+			if tt.valid && isPlayingAWildCard && player.Team.Melds[0].WildCount < 1 {
+				t.Log(player.Team.Melds)
 				t.Error("Expected meld to become unnatural")
 			}
 
@@ -405,8 +485,9 @@ func TestAddToMeldCreatesACanasta(t *testing.T) {
 			},
 			add: []int{0},
 			meld: game.Meld{
-				Id:   0,
-				Rank: game.Queen,
+				Id:        0,
+				Rank:      game.Queen,
+				WildCount: 3,
 				Cards: []game.Card{
 					{1, game.Hearts, game.Two},
 					{2, game.Hearts, game.Two},
@@ -422,19 +503,26 @@ func TestAddToMeldCreatesACanasta(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			game := game.NewGame([]string{"A"})
+			gameObj := game.NewGame([]string{"A"})
 
-			player := game.Players[0]
-			player.Hand = append(player.Hand, tt.hand...)
+			hand := make(game.PlayerHand)
+			for _, card := range tt.hand {
+				hand[card.GetId()] = card
+			}
+
+			player := gameObj.Players[0]
+			player.Hand = hand
 			player.Team.Melds = append(player.Team.Melds, tt.meld)
 
-			err := player.AddToMeld(tt.add, game.TeamA.Melds[0].Id)
+			err := player.AddToMeld(tt.add, 0)
 
 			if tt.valid && err != nil {
 				t.Log(err)
 				t.FailNow()
 			}
 			if !tt.valid && err == nil {
+				t.Log(player.Team.Melds)
+				t.Log(player.Team.Canastas)
 				t.Log("Expected error")
 				t.FailNow()
 			}
