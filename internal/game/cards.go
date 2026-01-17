@@ -108,7 +108,7 @@ func (card Card) String() string {
 	if card.Rank == Joker {
 		return fmt.Sprintf("%d: Joker", card.Id)
 	}
-	return fmt.Sprintf("%d: %s of %s", card.Id, card.Rank.String(), card.Suit.String())
+	return fmt.Sprintf("%s of %s", card.Rank.String(), card.Suit.String())
 }
 
 func (c Card) IsWild() bool {

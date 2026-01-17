@@ -540,28 +540,143 @@ func TestAddToMeldCreatesACanasta(t *testing.T) {
 }
 
 func TestAddSevenCardsToMeld(t *testing.T) {
-	// {
-	// 	name: "all seven at once",
-	// 	hand: []game.Card{
-	// 		{game.Hearts, game.Five},
-	// 		{game.Hearts, game.Five},
-	// 		{game.Diamonds, game.Five},
-	// 		{game.Diamonds, game.Five},
-	// 		{game.Diamonds, game.Five},
-	// 		{game.Spades, game.Five},
-	// 		{game.Spades, game.Five},
-	// 	},
-	// 	add: []int{0},
-	// 	meld: game.Meld{
-	// 		Rank: game.Queen,
-	// 		Cards: []game.Card{
-	// 			{game.Hearts, game.Queen},
-	// 			{game.Spades, game.Two},
-	// 			{game.Diamonds, game.Queen},
-	// 		},
-	// 	},
-	// 	valid: true,
-	// },
+	tests := []struct {
+		name  string
+		hand  []game.Card
+		add   []int
+		valid bool
+	}{
+		{
+			name: "all seven at once",
+			hand: []game.Card{
+				{0, game.Hearts, game.Five},
+				{1, game.Hearts, game.Five},
+				{2, game.Diamonds, game.Five},
+				{3, game.Diamonds, game.Five},
+				{4, game.Diamonds, game.Five},
+				{5, game.Spades, game.Five},
+				{6, game.Spades, game.Five},
+			},
+			add:   []int{0, 1, 2, 3, 4, 5, 6},
+			valid: true,
+		},
+		{
+			name: "all seven wildcards at once",
+			hand: []game.Card{
+				{0, game.Wild, game.Joker},
+				{1, game.Wild, game.Two},
+				{2, game.Wild, game.Joker},
+				{3, game.Wild, game.Two},
+				{4, game.Wild, game.Joker},
+				{5, game.Wild, game.Joker},
+				{6, game.Wild, game.Joker},
+			},
+			add:   []int{0, 1, 2, 3, 4, 5, 6},
+			valid: true,
+		},
+		{
+			name: "mixed cards",
+			hand: []game.Card{
+				{0, game.Hearts, game.Seven},
+				{1, game.Hearts, game.Five},
+				{2, game.Diamonds, game.Six},
+				{3, game.Diamonds, game.Five},
+				{4, game.Diamonds, game.Five},
+				{5, game.Spades, game.Five},
+				{6, game.Spades, game.Five},
+			},
+			add:   []int{0, 1, 2, 3, 4, 5, 6},
+			valid: false,
+		},
+		{
+			name: "less than 7 cards",
+			hand: []game.Card{
+				{0, game.Hearts, game.Seven},
+				{1, game.Hearts, game.Five},
+				{2, game.Diamonds, game.Six},
+				{3, game.Diamonds, game.Five},
+				{4, game.Diamonds, game.Five},
+				{5, game.Spades, game.Five},
+			},
+			add:   []int{0, 1, 2, 3, 4, 5},
+			valid: false,
+		},
+		{
+			name: "contains a three",
+			hand: []game.Card{
+				{0, game.Hearts, game.Seven},
+				{1, game.Hearts, game.Five},
+				{2, game.Diamonds, game.Six},
+				{3, game.Diamonds, game.Five},
+				{4, game.Diamonds, game.Five},
+				{5, game.Spades, game.Five},
+				{6, game.Spades, game.Three},
+			},
+			add:   []int{0, 1, 2, 3, 4, 5, 6},
+			valid: false,
+		},
+		{
+			name: "ten cards at once",
+			hand: []game.Card{
+				{0, game.Hearts, game.King},
+				{1, game.Hearts, game.King},
+				{2, game.Diamonds, game.King},
+				{3, game.Diamonds, game.King},
+				{4, game.Diamonds, game.Five},
+				{5, game.Spades, game.King},
+				{6, game.Spades, game.King},
+				{7, game.Spades, game.King},
+				{8, game.Spades, game.King},
+				{9, game.Spades, game.King},
+			},
+			add:   []int{0, 1, 2, 3, 4, 5, 6},
+			valid: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gameObj := game.NewGame([]string{"A"})
+
+			hand := make(game.PlayerHand)
+			for _, card := range tt.hand {
+				hand[card.GetId()] = card
+			}
+
+			player := gameObj.Players[0]
+			player.Hand = hand
+			player.Team.GoneDown = true
+
+			err := player.NewMeld(tt.add)
+
+			if tt.valid && err != nil {
+				t.Log(err)
+				t.FailNow()
+			}
+			if !tt.valid && err == nil {
+				t.Log(player.Team.Melds)
+				t.Log(player.Team.Canastas)
+				t.Log("Expected error")
+				t.FailNow()
+			}
+
+			if tt.valid && len(player.Hand) != len(tt.hand)-len(tt.add) {
+				t.Logf("Hand: %v\n", player.Hand)
+				t.Errorf("Expected %d cards removed from hand. %d remaining", len(tt.add), len(player.Hand))
+			}
+
+			if tt.valid && len(player.Team.Canastas) == 0 {
+				t.Logf("Melds: %v\n", player.Team.Melds)
+				t.Logf("Hand: %v\n", player.Hand)
+				t.Error("Expected a canaasta to be made")
+			}
+
+			if tt.valid && len(player.Team.Melds) != 0 {
+				t.Error("Meld should have been removed")
+			}
+
+		})
+	}
 }
 
 func TestCanDiscard(t *testing.T) {

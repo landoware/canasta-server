@@ -213,9 +213,9 @@ func (p *Player) NewMeld(cardIds []int) error {
 		p.Hand.removeCards(cardIds)
 		p.Team.Melds = append(p.Team.Melds, meld)
 
-		// if len(meld.Cards) >= 7 {
-		// 	p.NewCanasta(&p.Team.Melds[len(p.Team.Melds)])
-		// }
+		if len(meld.Cards) >= 7 {
+			p.NewCanasta(len(p.Team.Melds) - 1)
+		}
 
 		return nil
 	} else {
