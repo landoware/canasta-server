@@ -13,6 +13,26 @@ import (
 func (g *Game) DrawFromDeck(p *Player) {
 	cards := g.Hand.Deck.Draw(2)
 
+	// Keep drawing replacement cards for red threes
+	for slices.ContainsFunc(cards, func(c Card) bool {
+		return c.Rank == Three && !c.Suit.isBlack()
+	}) {
+		// Find and process red threes
+		var remainingCards []Card
+		for _, card := range cards {
+			if card.Rank == Three && !card.Suit.isBlack() {
+				// Add red three to team's collection
+				p.Team.RedThrees = append(p.Team.RedThrees, card)
+				// Draw a replacement card
+				remainingCards = append(remainingCards, g.Hand.Deck.Draw(1)...)
+			} else {
+				remainingCards = append(remainingCards, card)
+			}
+		}
+		cards = remainingCards
+	}
+
+	// Add all non-red-three cards to player's hand
 	for _, card := range cards {
 		p.Hand[card.GetId()] = card
 	}

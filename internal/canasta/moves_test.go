@@ -25,6 +25,32 @@ func TestDraw(t *testing.T) {
 	}
 }
 
+func TestDrawRedThree(t *testing.T) {
+	g := canasta.NewGame([]string{"A", "B", "C", "D"})
+	p := g.Players[0]
+
+	startingHandLength := len(p.Hand)
+	startingDeckLength := g.Hand.Deck.Count()
+
+	g.Hand.Deck.Cards[startingDeckLength-1] = canasta.Card{startingDeckLength, canasta.Hearts, canasta.Three}
+
+	g.DrawFromDeck(p)
+
+	if len(p.Hand) != startingHandLength+2 {
+		t.Errorf("Did not increase player's card count: got %d, want %d", len(p.Hand), startingHandLength+2)
+	}
+	if g.Hand.Deck.Count() != startingDeckLength-3 {
+		t.Errorf("Cards remaining in deck: got %d, want %d (drew 2 cards, one was red three, drew 1 replacement)", g.Hand.Deck.Count(), startingDeckLength-3)
+	}
+	if g.Phase != canasta.PhasePlaying {
+		t.Error("Phase did not advance")
+	}
+	if len(p.Team.RedThrees) != 1 {
+		t.Errorf("Did not add Red three to team: got %d, want 1", len(p.Team.RedThrees))
+	}
+
+}
+
 func TestNewMeld(t *testing.T) {
 	tests := []struct {
 		name        string

@@ -508,3 +508,336 @@ func TestInvalidGoDown(t *testing.T) {
 		})
 	}
 }
+
+func TestGameScore(t *testing.T) {
+	tests := []struct {
+		name           string
+		teamAMelds     []canasta.Meld
+		teamACanastas  []canasta.Canasta
+		teamAHandCards map[int][]canasta.Card // player index -> cards in hand
+		teamBMelds     []canasta.Meld
+		teamBCanastas  []canasta.Canasta
+		teamBHandCards map[int][]canasta.Card // player index -> cards in hand
+		expectedScoreA int
+		expectedScoreB int
+	}{
+		{
+			name:          "no melds, no cards in hand",
+			teamAMelds:    []canasta.Meld{},
+			teamACanastas: []canasta.Canasta{},
+			teamAHandCards: map[int][]canasta.Card{
+				0: {},
+				2: {},
+			},
+			teamBMelds:    []canasta.Meld{},
+			teamBCanastas: []canasta.Canasta{},
+			teamBHandCards: map[int][]canasta.Card{
+				1: {},
+				3: {},
+			},
+			expectedScoreA: 0,
+			expectedScoreB: 0,
+		},
+		{
+			name: "team A has one natural meld",
+			teamAMelds: []canasta.Meld{
+				{
+					Id:   0,
+					Rank: canasta.Five,
+					Cards: []canasta.Card{
+						{0, canasta.Hearts, canasta.Five},
+						{1, canasta.Diamonds, canasta.Five},
+						{2, canasta.Clubs, canasta.Five},
+					},
+					WildCount: 0,
+				},
+			},
+			teamACanastas: []canasta.Canasta{},
+			teamAHandCards: map[int][]canasta.Card{
+				0: {},
+				2: {},
+			},
+			teamBMelds:    []canasta.Meld{},
+			teamBCanastas: []canasta.Canasta{},
+			teamBHandCards: map[int][]canasta.Card{
+				1: {},
+				3: {},
+			},
+			expectedScoreA: 15, // 3 fives at 5 points each
+			expectedScoreB: 0,
+		},
+		{
+			name:       "team A has natural canasta",
+			teamAMelds: []canasta.Meld{},
+			teamACanastas: []canasta.Canasta{
+				{
+					Id:   0,
+					Rank: canasta.Eight,
+					Cards: []canasta.Card{
+						{0, canasta.Hearts, canasta.Eight},
+						{1, canasta.Diamonds, canasta.Eight},
+						{2, canasta.Clubs, canasta.Eight},
+						{3, canasta.Spades, canasta.Eight},
+						{4, canasta.Hearts, canasta.Eight},
+						{5, canasta.Diamonds, canasta.Eight},
+						{6, canasta.Clubs, canasta.Eight},
+					},
+					Count:   7,
+					Natural: true,
+				},
+			},
+			teamAHandCards: map[int][]canasta.Card{
+				0: {},
+				2: {},
+			},
+			teamBMelds:    []canasta.Meld{},
+			teamBCanastas: []canasta.Canasta{},
+			teamBHandCards: map[int][]canasta.Card{
+				1: {},
+				3: {},
+			},
+			expectedScoreA: 570, // (7 * 10) + 500 bonus for natural canasta
+			expectedScoreB: 0,
+		},
+		{
+			name:       "team A has mixed canasta",
+			teamAMelds: []canasta.Meld{},
+			teamACanastas: []canasta.Canasta{
+				{
+					Id:   0,
+					Rank: canasta.Eight,
+					Cards: []canasta.Card{
+						{0, canasta.Hearts, canasta.Eight},
+						{1, canasta.Diamonds, canasta.Eight},
+						{2, canasta.Clubs, canasta.Eight},
+						{3, canasta.Spades, canasta.Eight},
+						{4, canasta.Hearts, canasta.Eight},
+						{5, canasta.Wild, canasta.Joker},
+						{6, canasta.Hearts, canasta.Two},
+					},
+					Count:   7,
+					Natural: false,
+				},
+			},
+			teamAHandCards: map[int][]canasta.Card{
+				0: {},
+				2: {},
+			},
+			teamBMelds:    []canasta.Meld{},
+			teamBCanastas: []canasta.Canasta{},
+			teamBHandCards: map[int][]canasta.Card{
+				1: {},
+				3: {},
+			},
+			expectedScoreA: 420, // (5 * 10) + 50 + 20 + 300 bonus for mixed canasta
+			expectedScoreB: 0,
+		},
+		{
+			name:       "team A has seven canasta",
+			teamAMelds: []canasta.Meld{},
+			teamACanastas: []canasta.Canasta{
+				{
+					Id:   0,
+					Rank: canasta.Seven,
+					Cards: []canasta.Card{
+						{0, canasta.Hearts, canasta.Seven},
+						{1, canasta.Diamonds, canasta.Seven},
+						{2, canasta.Clubs, canasta.Seven},
+						{3, canasta.Spades, canasta.Seven},
+						{4, canasta.Hearts, canasta.Seven},
+						{5, canasta.Diamonds, canasta.Seven},
+						{6, canasta.Clubs, canasta.Seven},
+					},
+					Count:   7,
+					Natural: true,
+				},
+			},
+			teamAHandCards: map[int][]canasta.Card{
+				0: {},
+				2: {},
+			},
+			teamBMelds:    []canasta.Meld{},
+			teamBCanastas: []canasta.Canasta{},
+			teamBHandCards: map[int][]canasta.Card{
+				1: {},
+				3: {},
+			},
+			expectedScoreA: 1535, // (7 * 5) + 1500 bonus for seven canasta
+			expectedScoreB: 0,
+		},
+		{
+			name:       "team A has wild canasta",
+			teamAMelds: []canasta.Meld{},
+			teamACanastas: []canasta.Canasta{
+				{
+					Id:   0,
+					Rank: canasta.Wild,
+					Cards: []canasta.Card{
+						{0, canasta.Wild, canasta.Joker},
+						{1, canasta.Wild, canasta.Joker},
+						{2, canasta.Hearts, canasta.Two},
+						{3, canasta.Diamonds, canasta.Two},
+						{4, canasta.Clubs, canasta.Two},
+						{5, canasta.Spades, canasta.Two},
+						{6, canasta.Wild, canasta.Joker},
+					},
+					Count:   7,
+					Natural: false,
+				},
+			},
+			teamAHandCards: map[int][]canasta.Card{
+				0: {},
+				2: {},
+			},
+			teamBMelds:    []canasta.Meld{},
+			teamBCanastas: []canasta.Canasta{},
+			teamBHandCards: map[int][]canasta.Card{
+				1: {},
+				3: {},
+			},
+			expectedScoreA: 2730, // (3 * 50) + (4 * 20) + 2500 bonus for wild canasta
+			expectedScoreB: 0,
+		},
+		{
+			name: "cards in hands subtract from score",
+			teamAMelds: []canasta.Meld{
+				{
+					Id:   0,
+					Rank: canasta.Ace,
+					Cards: []canasta.Card{
+						{0, canasta.Hearts, canasta.Ace},
+						{1, canasta.Diamonds, canasta.Ace},
+						{2, canasta.Clubs, canasta.Ace},
+					},
+					WildCount: 0,
+				},
+			},
+			teamACanastas: []canasta.Canasta{},
+			teamAHandCards: map[int][]canasta.Card{
+				0: {
+					{10, canasta.Hearts, canasta.Five},
+					{11, canasta.Diamonds, canasta.Ten},
+				},
+				2: {
+					{12, canasta.Clubs, canasta.Ace},
+				},
+			},
+			teamBMelds:    []canasta.Meld{},
+			teamBCanastas: []canasta.Canasta{},
+			teamBHandCards: map[int][]canasta.Card{
+				1: {},
+				3: {},
+			},
+			expectedScoreA: 25, // (3 * 20) - 5 - 10 - 20
+			expectedScoreB: 0,
+		},
+		{
+			name:          "black threes in hand are negative",
+			teamAMelds:    []canasta.Meld{},
+			teamACanastas: []canasta.Canasta{},
+			teamAHandCards: map[int][]canasta.Card{
+				0: {
+					{10, canasta.Clubs, canasta.Three},
+					{11, canasta.Spades, canasta.Three},
+				},
+				2: {},
+			},
+			teamBMelds:    []canasta.Meld{},
+			teamBCanastas: []canasta.Canasta{},
+			teamBHandCards: map[int][]canasta.Card{
+				1: {},
+				3: {},
+			},
+			expectedScoreA: -200, // -100 - 100
+			expectedScoreB: 0,
+		},
+		{
+			name: "both teams have melds and cards",
+			teamAMelds: []canasta.Meld{
+				{
+					Id:   0,
+					Rank: canasta.Queen,
+					Cards: []canasta.Card{
+						{0, canasta.Hearts, canasta.Queen},
+						{1, canasta.Diamonds, canasta.Queen},
+						{2, canasta.Clubs, canasta.Queen},
+						{3, canasta.Spades, canasta.Queen},
+					},
+					WildCount: 0,
+				},
+			},
+			teamACanastas: []canasta.Canasta{},
+			teamAHandCards: map[int][]canasta.Card{
+				0: {
+					{10, canasta.Hearts, canasta.Four},
+				},
+				2: {},
+			},
+			teamBMelds: []canasta.Meld{
+				{
+					Id:   1,
+					Rank: canasta.King,
+					Cards: []canasta.Card{
+						{4, canasta.Hearts, canasta.King},
+						{5, canasta.Diamonds, canasta.King},
+						{6, canasta.Clubs, canasta.King},
+					},
+					WildCount: 0,
+				},
+			},
+			teamBCanastas: []canasta.Canasta{},
+			teamBHandCards: map[int][]canasta.Card{
+				1: {
+					{11, canasta.Hearts, canasta.Six},
+				},
+				3: {},
+			},
+			expectedScoreA: 35, // (4 * 10) - 5
+			expectedScoreB: 25, // (3 * 10) - 5
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := canasta.NewGame([]string{"A", "B", "C", "D"})
+
+			// Set up Team A
+			g.TeamA.Melds = tt.teamAMelds
+			g.TeamA.Canastas = tt.teamACanastas
+
+			// Set up Team B
+			g.TeamB.Melds = tt.teamBMelds
+			g.TeamB.Canastas = tt.teamBCanastas
+
+			// Set up player hands
+			for playerIdx, cards := range tt.teamAHandCards {
+				hand := make(canasta.PlayerHand)
+				for _, card := range cards {
+					hand[card.GetId()] = card
+				}
+				g.Players[playerIdx].Hand = hand
+			}
+
+			for playerIdx, cards := range tt.teamBHandCards {
+				hand := make(canasta.PlayerHand)
+				for _, card := range cards {
+					hand[card.GetId()] = card
+				}
+				g.Players[playerIdx].Hand = hand
+			}
+
+			// Call Score method
+			g.Score()
+
+			// Verify Team A score
+			if g.TeamA.Score != tt.expectedScoreA {
+				t.Errorf("Team A score = %d, expected %d", g.TeamA.Score, tt.expectedScoreA)
+			}
+
+			// Verify Team B score
+			if g.TeamB.Score != tt.expectedScoreB {
+				t.Errorf("Team B score = %d, expected %d", g.TeamB.Score, tt.expectedScoreB)
+			}
+		})
+	}
+}

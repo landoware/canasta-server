@@ -88,11 +88,12 @@ func (c Canasta) Score() (score int) {
 }
 
 type Team struct {
-	Score    int       `json:"score"`
-	Melds    []Meld    `json:"melds"`
-	Canastas []Canasta `json:"canastas"`
-	GoneDown bool      `json:"goneDown"`
-	CanGoOut bool      `json:"canGoOut"`
+	Score     int       `json:"score"`
+	Melds     []Meld    `json:"melds"`
+	Canastas  []Canasta `json:"canastas"`
+	GoneDown  bool      `json:"goneDown"`
+	CanGoOut  bool      `json:"canGoOut"`
+	RedThrees []Card    `json:"RedThrees"`
 }
 
 var meldRequirements = map[int]int{
@@ -113,18 +114,20 @@ func findIndex[T HasId](id int, slice []T) (index int, err error) {
 
 func NewGame(playerNames []string) Game {
 	teamA := Team{
-		Score:    0,
-		Melds:    make([]Meld, 0),
-		Canastas: make([]Canasta, 0),
-		GoneDown: false,
-		CanGoOut: false,
+		Score:     0,
+		Melds:     make([]Meld, 0),
+		Canastas:  make([]Canasta, 0),
+		GoneDown:  false,
+		CanGoOut:  false,
+		RedThrees: make([]Card, 0),
 	}
 	teamB := Team{
-		Score:    0,
-		Melds:    make([]Meld, 0),
-		Canastas: make([]Canasta, 0),
-		GoneDown: false,
-		CanGoOut: false,
+		Score:     0,
+		Melds:     make([]Meld, 0),
+		Canastas:  make([]Canasta, 0),
+		GoneDown:  false,
+		CanGoOut:  false,
+		RedThrees: make([]Card, 0),
 	}
 
 	players := make([]*Player, 0)
@@ -198,9 +201,12 @@ func (g *Game) NewHand() {
 	g.TeamA.Melds = make([]Meld, 0)
 	g.TeamA.Canastas = make([]Canasta, 0)
 	g.TeamA.GoneDown = false
+	g.TeamA.RedThrees = make([]Card, 0)
+
 	g.TeamB.Melds = make([]Meld, 0)
 	g.TeamB.Canastas = make([]Canasta, 0)
 	g.TeamB.GoneDown = false
+	g.TeamB.RedThrees = make([]Card, 0)
 
 	hand := &Hand{
 		Deck:        NewDeck(),
@@ -212,8 +218,32 @@ func (g *Game) NewHand() {
 	g.Deal()
 }
 
-func (g Game) Score() {
+func (g *Game) Score() {
+	for _, team := range []*Team{g.TeamA, g.TeamB} {
+		score := team.Score
 
+		// Score melds and canastas
+		for _, meld := range team.Melds {
+			score += meld.Score()
+		}
+		for _, c := range team.Canastas {
+			score += c.Score()
+		}
+
+		team.Score = score
+	}
+
+	for _, p := range g.Players {
+		for _, card := range p.Hand {
+			// Subtract card values from score (cards left in hand count against you)
+			// Black threes have negative value, but we still want to subtract them
+			if card.Rank == Three && card.Suit.isBlack() {
+				p.Team.Score -= 100 // Black threes cost 100 points
+			} else {
+				p.Team.Score -= card.Value()
+			}
+		}
+	}
 }
 
 func (g Game) EndGame() {
