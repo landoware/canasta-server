@@ -106,7 +106,7 @@ func (card Card) Value() int {
 
 func (card Card) String() string {
 	if card.Rank == Joker {
-		return fmt.Sprintf("%d: Joker", card.Id)
+		return "Joker"
 	}
 	return fmt.Sprintf("%s of %s", card.Rank.String(), card.Suit.String())
 }

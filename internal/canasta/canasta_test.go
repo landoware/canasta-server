@@ -145,70 +145,117 @@ func TestValidateMeld(t *testing.T) {
 
 func TestNewMeld(t *testing.T) {
 	tests := []struct {
-		name  string
-		rank  canasta.Rank
-		hand  []canasta.Card
-		valid bool
+		name        string
+		rank        canasta.Rank
+		hand        []canasta.Card
+		valid       bool
+		hasGoneDown bool
 	}{
 		{
-			name:  "natural",
-			rank:  canasta.Five,
-			hand:  []canasta.Card{{0, canasta.Clubs, canasta.Five}, {1, canasta.Clubs, canasta.Five}, {2, canasta.Clubs, canasta.Five}},
-			valid: true,
+			name:        "natural",
+			rank:        canasta.Five,
+			hand:        []canasta.Card{{0, canasta.Clubs, canasta.Five}, {1, canasta.Clubs, canasta.Five}, {2, canasta.Clubs, canasta.Five}},
+			valid:       true,
+			hasGoneDown: true,
 		},
 		{
-			name:  "mixed rank",
-			hand:  []canasta.Card{{0, canasta.Clubs, canasta.Five}, {1, canasta.Clubs, canasta.Six}, {2, canasta.Clubs, canasta.Seven}},
-			valid: false,
+			name:        "mixed rank",
+			hand:        []canasta.Card{{0, canasta.Clubs, canasta.Five}, {1, canasta.Clubs, canasta.Six}, {2, canasta.Clubs, canasta.Seven}},
+			valid:       false,
+			hasGoneDown: true,
 		},
 		{
-			name:  "mixed rank with wildcard",
-			hand:  []canasta.Card{{0, canasta.Wild, canasta.Joker}, {1, canasta.Clubs, canasta.Six}, {2, canasta.Clubs, canasta.Seven}},
-			valid: false,
+			name:        "mixed rank with wildcard",
+			hand:        []canasta.Card{{0, canasta.Wild, canasta.Joker}, {1, canasta.Clubs, canasta.Six}, {2, canasta.Clubs, canasta.Seven}},
+			valid:       false,
+			hasGoneDown: true,
 		},
 		{
-			name:  "unnatural",
-			rank:  canasta.Four,
-			hand:  []canasta.Card{{0, canasta.Clubs, canasta.Two}, {1, canasta.Wild, canasta.Joker}, {2, canasta.Clubs, canasta.Four}},
-			valid: true,
+			name:        "unnatural",
+			rank:        canasta.Four,
+			hand:        []canasta.Card{{0, canasta.Clubs, canasta.Two}, {1, canasta.Wild, canasta.Joker}, {2, canasta.Clubs, canasta.Four}},
+			valid:       true,
+			hasGoneDown: true,
 		},
 		{
-			name:  "unnatural mixed order",
-			rank:  canasta.Four,
-			hand:  []canasta.Card{{0, canasta.Clubs, canasta.Two}, {1, canasta.Clubs, canasta.Four}, {2, canasta.Clubs, canasta.Four}},
-			valid: true,
+			name:        "unnatural mixed order",
+			rank:        canasta.Four,
+			hand:        []canasta.Card{{0, canasta.Clubs, canasta.Two}, {1, canasta.Clubs, canasta.Four}, {2, canasta.Clubs, canasta.Four}},
+			valid:       true,
+			hasGoneDown: true,
 		},
 		{
-			name:  "unnatural with sevens",
-			hand:  []canasta.Card{{0, canasta.Clubs, canasta.Two}, {1, canasta.Wild, canasta.Joker}, {2, canasta.Clubs, canasta.Seven}},
-			valid: false,
+			name:        "unnatural with sevens",
+			hand:        []canasta.Card{{0, canasta.Clubs, canasta.Two}, {1, canasta.Wild, canasta.Joker}, {2, canasta.Clubs, canasta.Seven}},
+			valid:       false,
+			hasGoneDown: true,
 		},
 		{
-			name:  "contains a three",
-			hand:  []canasta.Card{{0, canasta.Clubs, canasta.Five}, {1, canasta.Clubs, canasta.Five}, {2, canasta.Clubs, canasta.Three}},
-			valid: false,
+			name:        "contains a three",
+			hand:        []canasta.Card{{0, canasta.Clubs, canasta.Five}, {1, canasta.Clubs, canasta.Five}, {2, canasta.Clubs, canasta.Three}},
+			valid:       false,
+			hasGoneDown: true,
 		},
 		{
-			name:  "max wildcards",
-			rank:  canasta.Five,
-			hand:  []canasta.Card{{0, canasta.Clubs, canasta.Two}, {1, canasta.Wild, canasta.Joker}, {2, canasta.Wild, canasta.Joker}, {3, canasta.Clubs, canasta.Five}},
-			valid: true,
+			name:        "max wildcards",
+			rank:        canasta.Five,
+			hand:        []canasta.Card{{0, canasta.Clubs, canasta.Two}, {1, canasta.Wild, canasta.Joker}, {2, canasta.Wild, canasta.Joker}, {3, canasta.Clubs, canasta.Five}},
+			valid:       true,
+			hasGoneDown: true,
 		},
 		{
-			name:  "wildcards meld",
-			rank:  canasta.Wild,
-			hand:  []canasta.Card{{0, canasta.Clubs, canasta.Two}, {1, canasta.Wild, canasta.Joker}, {2, canasta.Wild, canasta.Joker}},
-			valid: true,
+			name:        "wildcards meld",
+			rank:        canasta.Wild,
+			hand:        []canasta.Card{{0, canasta.Clubs, canasta.Two}, {1, canasta.Wild, canasta.Joker}, {2, canasta.Wild, canasta.Joker}},
+			valid:       true,
+			hasGoneDown: true,
 		},
 		{
-			name:  "too many wildcards",
-			hand:  []canasta.Card{{0, canasta.Clubs, canasta.Two}, {1, canasta.Wild, canasta.Joker}, {2, canasta.Wild, canasta.Joker}, {3, canasta.Wild, canasta.Joker}, {4, canasta.Clubs, canasta.Four}},
-			valid: false,
+			name:        "too many wildcards",
+			hand:        []canasta.Card{{0, canasta.Clubs, canasta.Two}, {1, canasta.Wild, canasta.Joker}, {2, canasta.Wild, canasta.Joker}, {3, canasta.Wild, canasta.Joker}, {4, canasta.Clubs, canasta.Four}},
+			valid:       false,
+			hasGoneDown: true,
 		},
 		{
-			name:  "no cards",
-			hand:  []canasta.Card{},
-			valid: false,
+			name:        "no cards",
+			hand:        []canasta.Card{},
+			valid:       false,
+			hasGoneDown: true,
+		},
+		{
+			name:        "natural hasn't gone down",
+			rank:        canasta.Five,
+			hand:        []canasta.Card{{0, canasta.Clubs, canasta.Five}, {1, canasta.Clubs, canasta.Five}, {2, canasta.Clubs, canasta.Five}},
+			valid:       true,
+			hasGoneDown: false,
+		},
+		{
+			name:        "max wildcards hasn't gone down",
+			rank:        canasta.Five,
+			hand:        []canasta.Card{{0, canasta.Clubs, canasta.Two}, {1, canasta.Wild, canasta.Joker}, {2, canasta.Wild, canasta.Joker}, {3, canasta.Clubs, canasta.Five}},
+			valid:       true,
+			hasGoneDown: false,
+		},
+		{
+			name:        "wildcards meld hasn't gone down",
+			rank:        canasta.Wild,
+			hand:        []canasta.Card{{0, canasta.Clubs, canasta.Two}, {1, canasta.Wild, canasta.Joker}, {2, canasta.Wild, canasta.Joker}},
+			valid:       true,
+			hasGoneDown: false,
+		},
+		{
+			name:        "unnatural hasn't gone down",
+			rank:        canasta.Four,
+			hand:        []canasta.Card{{0, canasta.Clubs, canasta.Two}, {1, canasta.Wild, canasta.Joker}, {2, canasta.Clubs, canasta.Four}},
+			valid:       true,
+			hasGoneDown: false,
+		},
+		{
+			name:        "unnatural mixed order hasn't gone down",
+			rank:        canasta.Four,
+			hand:        []canasta.Card{{0, canasta.Clubs, canasta.Two}, {1, canasta.Clubs, canasta.Four}, {2, canasta.Clubs, canasta.Four}},
+			valid:       true,
+			hasGoneDown: false,
 		},
 	}
 	for _, tt := range tests {
@@ -225,7 +272,7 @@ func TestNewMeld(t *testing.T) {
 				Hand: hand,
 				Team: &canasta.Team{
 					Melds:    make([]canasta.Meld, 0),
-					GoneDown: true,
+					GoneDown: tt.hasGoneDown,
 				},
 			}
 
@@ -234,6 +281,7 @@ func TestNewMeld(t *testing.T) {
 			if tt.valid && err != nil {
 				t.Error(err)
 			}
+
 			if !tt.valid && err == nil {
 				t.Log(player.Team.Melds)
 				t.Error("Expected error")
@@ -248,8 +296,12 @@ func TestNewMeld(t *testing.T) {
 				t.Error("Took cards from hand for an invalid meld")
 			}
 
-			if tt.valid && len(player.Team.Melds) == 0 {
+			if tt.valid && tt.hasGoneDown && len(player.Team.Melds) == 0 {
 				t.Error("Cards not found in meld")
+			}
+
+			if tt.valid && !tt.hasGoneDown && len(player.StagingMelds) == 0 {
+				t.Error("Cards not found in staging meld")
 			}
 
 			if !tt.valid && len(player.Team.Melds) != 0 {
@@ -362,7 +414,7 @@ func TestAddToMeld(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			hand := make(canasta.PlayerHand)
 
-			game := canasta.NewGame([]string{"A"})
+			game := canasta.NewGame([]string{"A", "B", "C", "D"})
 
 			for _, card := range tt.hand {
 				hand[card.GetId()] = card
@@ -503,7 +555,7 @@ func TestAddToMeldCreatesACanasta(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			game := canasta.NewGame([]string{"A"})
+			game := canasta.NewGame([]string{"A", "B", "C", "D"})
 
 			hand := make(canasta.PlayerHand)
 			for _, card := range tt.hand {
@@ -636,7 +688,7 @@ func TestAddSevenCardsToMeld(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			game := canasta.NewGame([]string{"A"})
+			game := canasta.NewGame([]string{"A", "B", "C", "D"})
 
 			hand := make(canasta.PlayerHand)
 			for _, card := range tt.hand {
@@ -768,15 +820,221 @@ func TestAddToStagingMeld(t *testing.T) {
 
 }
 
-func TestCanGoDown(t *testing.T) {
+func TestValidGoDown(t *testing.T) {
+	tests := []struct {
+		name           string
+		playerAStaging []canasta.Meld
+		playerAHand    []canasta.Card
+		playerCStaging []canasta.Meld
+		playerCHand    []canasta.Card
+	}{
+		{
+			name:        "nothing in either staging meld",
+			playerAHand: make([]canasta.Card, 0),
+			playerAStaging: []canasta.Meld{{
+				Id: 0,
+				Cards: []canasta.Card{
+					{0, canasta.Wild, canasta.Joker},
+					{1, canasta.Wild, canasta.Joker},
+					{2, canasta.Wild, canasta.Joker},
+				},
+				Rank:      canasta.Wild,
+				WildCount: 3,
+			}},
+			playerCHand:    make([]canasta.Card, 0),
+			playerCStaging: make([]canasta.Meld, 0),
+		},
+		{
+			name:        "partner has one staging meld",
+			playerAHand: make([]canasta.Card, 0),
+			playerAStaging: []canasta.Meld{{
+				Id: 0,
+				Cards: []canasta.Card{
+					{0, canasta.Wild, canasta.Joker},
+					{1, canasta.Wild, canasta.Joker},
+					{2, canasta.Wild, canasta.Joker},
+				},
+				Rank:      canasta.Wild,
+				WildCount: 3,
+			}},
+			playerCHand: make([]canasta.Card, 0),
+			playerCStaging: []canasta.Meld{{
+				Id: 3,
+				Cards: []canasta.Card{
+					{3, canasta.Diamonds, canasta.Seven},
+					{4, canasta.Hearts, canasta.Seven},
+					{5, canasta.Clubs, canasta.Seven},
+				},
+				Rank:      canasta.Seven,
+				WildCount: 0,
+			}},
+		},
+		{
+			name:        "partner has multiple staging melds",
+			playerAHand: make([]canasta.Card, 0),
+			playerAStaging: []canasta.Meld{{
+				Id: 0,
+				Cards: []canasta.Card{
+					{0, canasta.Wild, canasta.Joker},
+					{1, canasta.Wild, canasta.Joker},
+					{2, canasta.Wild, canasta.Joker},
+				},
+				Rank:      canasta.Wild,
+				WildCount: 3,
+			}},
+			playerCHand: make([]canasta.Card, 0),
+			playerCStaging: []canasta.Meld{
+				{
+					Id: 3,
+					Cards: []canasta.Card{
+						{3, canasta.Diamonds, canasta.Seven},
+						{4, canasta.Hearts, canasta.Seven},
+						{5, canasta.Clubs, canasta.Seven},
+					},
+					Rank:      canasta.Seven,
+					WildCount: 0,
+				},
+				{
+					Id: 3,
+					Cards: []canasta.Card{
+						{6, canasta.Diamonds, canasta.Four},
+						{7, canasta.Hearts, canasta.Four},
+						{8, canasta.Clubs, canasta.Four},
+					},
+					Rank:      canasta.Four,
+					WildCount: 0,
+				},
+			},
+		},
+	}
 
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			aHand := make(canasta.PlayerHand)
+			cHand := make(canasta.PlayerHand)
+
+			for _, card := range tt.playerAHand {
+				aHand[card.GetId()] = card
+			}
+			for _, card := range tt.playerCHand {
+				cHand[card.GetId()] = card
+			}
+
+			g := canasta.NewGame([]string{"A", "B", "C", "D"})
+
+			a := g.Players[0]
+			a.StagingMelds = tt.playerAStaging
+			a.Hand = aHand
+
+			// partnerStagingMeldInitLength := len(tt.playerCStaging)
+
+			c := g.Players[2]
+			c.StagingMelds = tt.playerCStaging
+
+			err := g.GoDown(a)
+
+			if err != nil {
+				t.Error(err)
+			}
+
+			if !a.Team.GoneDown {
+				t.Error("Did not update team flag")
+			}
+
+			// Assert new melds created
+			if len(a.Team.Melds) == 0 {
+				t.Error("No meld(s) created")
+			}
+
+			// Assert player's hand has cards removed
+			if len(a.StagingMelds) != 0 {
+				t.Error("Did not clear player's staging melds")
+			}
+
+			// Assert partner's hand had staaging melds moved to their hand
+			partnerCardCount := 0
+			for _, meld := range tt.playerCStaging {
+				partnerCardCount += len(meld.Cards)
+			}
+			if len(tt.playerCHand)+partnerCardCount != len(c.Hand) {
+				t.Errorf("Expected %d cards to be added to partner's hand, %d added", partnerCardCount, len(c.Hand)-len(tt.playerCHand))
+			}
+
+			// Assert partner's staging hand is empty
+			if len(c.StagingMelds) != 0 {
+				t.Error("Did not remove teamamate's staging melds")
+			}
+
+			// Assert a canasta was not created
+			if len(a.Team.Canastas) != 0 {
+				t.Error("Should not have created a canasta")
+			}
+		})
+	}
 }
 
-func TestGoDown(t *testing.T) {
+func TestStagingMeldToCanasta(t *testing.T) {
+	tests := []struct {
+		name           string
+		playerAStaging []canasta.Meld
+		playerAHand    []canasta.Card
+	}{
+		{
+			name:        "straight to a canasta",
+			playerAHand: make([]canasta.Card, 0),
+			playerAStaging: []canasta.Meld{{
+				Id: 0,
+				Cards: []canasta.Card{
+					{0, canasta.Wild, canasta.Joker},
+					{1, canasta.Wild, canasta.Joker},
+					{2, canasta.Hearts, canasta.Two},
+					{3, canasta.Wild, canasta.Joker},
+					{4, canasta.Wild, canasta.Joker},
+					{5, canasta.Hearts, canasta.Two},
+					{6, canasta.Clubs, canasta.Two},
+				},
+				Rank:      canasta.Wild,
+				WildCount: 7,
+			}},
+		},
+	}
 
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			aHand := make(canasta.PlayerHand)
+
+			for _, card := range tt.playerAHand {
+				aHand[card.GetId()] = card
+			}
+
+			g := canasta.NewGame([]string{"A", "B", "C", "D"})
+
+			a := g.Players[0]
+			a.StagingMelds = tt.playerAStaging
+			a.Hand = aHand
+
+			err := g.GoDown(a)
+
+			if err != nil {
+				t.Error(err)
+			}
+
+			if len(a.StagingMelds) != 0 {
+				t.Error("Should not have created a staging meld")
+			}
+
+			if len(a.Team.Canastas) == 0 {
+				t.Error("Expected canasta to be created")
+			}
+
+			t.Logf("Melds %v", a.Team.Melds)
+		})
+	}
 }
 
-func TestNewCanasta(t *testing.T) {
+func TestInvalidGoDown(t *testing.T) {
+	// When invalid
+	// Assert both player's staging meld remains unchanged
 
 }
 

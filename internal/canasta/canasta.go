@@ -2,6 +2,7 @@ package canasta
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 )
 
@@ -26,6 +27,7 @@ type Player struct {
 	Foot         []Card     `json:"foot"`
 	StagingMelds []Meld     `json:"stagingMelds"`
 	MadeCanasta  bool       `json:"madeCanasta"`
+	partner      *Player
 }
 
 type PlayerHand map[int]Card
@@ -43,6 +45,13 @@ type Meld struct {
 
 func (m Meld) GetId() int { return m.Id }
 
+func (m Meld) Score() (score int) {
+	for _, card := range m.Cards {
+		score += card.Value()
+	}
+	return
+}
+
 type Canasta struct {
 	Id    int    `json:"id"`
 	Rank  Rank   `json:"rank"`
@@ -52,6 +61,23 @@ type Canasta struct {
 
 func (c Canasta) GetId() int { return c.Id }
 
+func (c Canasta) Score() (score int) {
+	for _, card := range c.Cards {
+		score += card.Value()
+	}
+	if c.Rank == Wild {
+		return score + 2500
+	}
+	if c.Rank == Seven {
+		return score + 1500
+	}
+	if slices.ContainsFunc(c.Cards, func(card Card) bool { return card.IsWild() }) {
+		return score + 300
+	} else {
+		return score + 500
+	}
+}
+
 type Team struct {
 	Score    int       `json:"score"`
 	Melds    []Meld    `json:"melds"`
@@ -60,11 +86,11 @@ type Team struct {
 	CanGoOut bool      `json:"canGoOut"`
 }
 
-var meldRequirements = []int{
-	50,
-	90,
-	120,
-	150,
+var meldRequirements = map[int]int{
+	1: 50,
+	2: 90,
+	3: 120,
+	4: 150,
 }
 
 func findIndex[T HasId](id int, slice []T) (index int, err error) {
@@ -109,6 +135,16 @@ func NewGame(playerNames []string) Game {
 				Foot: make([]Card, 0),
 			})
 		}
+	}
+
+	teamMap := map[int]int{
+		0: 2,
+		1: 3,
+		2: 0,
+		3: 1,
+	}
+	for i, player := range players {
+		player.partner = players[teamMap[i]]
 	}
 
 	hand := &Hand{
@@ -328,9 +364,39 @@ func (h *PlayerHand) removeCards(ids []int) {
 	}
 }
 
-func (g *Game) GoDown(p *Player) {
-	// Handle a player having 7+ cards in a staging meld
+func (g *Game) GoDown(p *Player) error {
+	pointsRequired := meldRequirements[g.HandNumber]
+	score := 0
+	for _, meld := range p.StagingMelds {
+		score += meld.Score()
+	}
+	if score < pointsRequired {
+		return fmt.Errorf("Cannot go down with fewer than %d points. You have played %d points.", pointsRequired, score)
+	}
 
+	p.Team.GoneDown = true
+
+	// When a player goes down, put the partner's staging meld cards back in their hand
+	t := p.partner
+	partnerMelds := t.StagingMelds
+	for _, meld := range partnerMelds {
+		for _, card := range meld.Cards {
+			t.Hand[card.GetId()] = card
+		}
+	}
+	t.StagingMelds = []Meld{}
+
+	for _, meld := range p.StagingMelds {
+		p.Team.Melds = append(p.Team.Melds, meld)
+
+		// Handle a player having 7+ cards in a staging meld
+		if len(meld.Cards) >= 7 {
+			p.NewCanasta(len(p.Team.Melds) - 1)
+		}
+	}
+	p.StagingMelds = []Meld{}
+
+	return nil
 }
 
 func (p *Player) NewCanasta(meldIndex int) {
@@ -365,7 +431,8 @@ func (g *Game) Discard(p *Player, cardId int) error {
 	p.Hand.removeCards([]int{cardId})
 	g.Hand.DiscardPile = append(g.Hand.DiscardPile, card)
 
-	if p.Team.CanGoOut && len(p.Hand) == 0 {
+	if p.Team.CanGoOut && len(
+		p.Hand) == 0 {
 		g.EndHand()
 	}
 
