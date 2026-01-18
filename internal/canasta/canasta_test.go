@@ -1335,10 +1335,259 @@ func TestInalidBurnCard(t *testing.T) {
 	}
 }
 
-func TestCanPickupDiscardPile(t *testing.T) {
+func TestValidPickupDiscardPile(t *testing.T) {
+	tests := []struct {
+		name       string
+		topCard    canasta.Card
+		playedIds  []int
+		playerHand []canasta.Card
+	}{
+		{
+			name:      "regular card",
+			topCard:   canasta.Card{0, canasta.Spades, canasta.Six},
+			playedIds: []int{1, 2},
+			playerHand: []canasta.Card{
+				{1, canasta.Clubs, canasta.Six},
+				{2, canasta.Hearts, canasta.Six},
+			},
+		},
+		{
+			name:      "pickup to start a wild meld",
+			topCard:   canasta.Card{0, canasta.Wild, canasta.Joker},
+			playedIds: []int{1, 2},
+			playerHand: []canasta.Card{
+				{1, canasta.Clubs, canasta.Two},
+				{2, canasta.Hearts, canasta.Two},
+			},
+		},
+		{
+			name:      "start an unnatural meld with two wildcards",
+			topCard:   canasta.Card{0, canasta.Wild, canasta.Eight},
+			playedIds: []int{1, 2},
+			playerHand: []canasta.Card{
+				{1, canasta.Clubs, canasta.Two},
+				{2, canasta.Hearts, canasta.Two},
+			},
+		},
+		{
+			name:      "start an unnatural meld with one wildcards",
+			topCard:   canasta.Card{0, canasta.Wild, canasta.King},
+			playedIds: []int{1, 2},
+			playerHand: []canasta.Card{
+				{1, canasta.Clubs, canasta.King},
+				{2, canasta.Hearts, canasta.Two},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hand := make(canasta.PlayerHand)
+			for _, card := range tt.playerHand {
+				hand[card.GetId()] = card
+			}
+			g := canasta.NewGame([]string{"A", "B", "C", "D"})
+			p := g.Players[0]
+			p.Team.GoneDown = true
+			for i := range 3 {
+				g.Hand.DiscardPile = append(g.Hand.DiscardPile, canasta.Card{i + 10, canasta.Spades, canasta.Three})
+			}
+			g.Hand.DiscardPile = append(g.Hand.DiscardPile, tt.topCard)
+			p.Hand = hand
 
+			err := g.PickUpDiscardPile(p, tt.playedIds)
+
+			if err != nil {
+				t.Error(err)
+			}
+
+			if len(p.Team.Melds) == 0 {
+				t.Error("Expected meld to be created")
+			}
+
+			if len(g.Hand.DiscardPile) != 0 {
+				t.Error("Expected empty discard pile")
+			}
+
+			if len(p.Hand) != 3 {
+				t.Log(p.Hand)
+				t.Error("Expected 3 cards to be in player's hand")
+			}
+
+			for _, card := range p.Hand {
+				if card.Rank != canasta.Three {
+					t.Error("Expected all threes in player's hand")
+				}
+			}
+		})
+	}
 }
 
-func TestPickupDiscardPile(t *testing.T) {
+func TestInvalidPickupDiscardPile(t *testing.T) {
+	tests := []struct {
+		name       string
+		topCard    canasta.Card
+		playedIds  []int
+		playerHand []canasta.Card
+	}{
+		{
+			name:      "regular incorrect card",
+			topCard:   canasta.Card{0, canasta.Spades, canasta.Ace},
+			playedIds: []int{1, 2},
+			playerHand: []canasta.Card{
+				{1, canasta.Clubs, canasta.Six},
+				{2, canasta.Hearts, canasta.Six},
+			},
+		},
+		{
+			name:      "pickup on black three",
+			topCard:   canasta.Card{0, canasta.Spades, canasta.Three},
+			playedIds: []int{1, 2},
+			playerHand: []canasta.Card{
+				{1, canasta.Clubs, canasta.Three},
+				{2, canasta.Hearts, canasta.Three},
+			},
+		},
+		{
+			name:      "try to start an unnatural sevens meld",
+			topCard:   canasta.Card{0, canasta.Wild, canasta.Seven},
+			playedIds: []int{1, 2},
+			playerHand: []canasta.Card{
+				{1, canasta.Clubs, canasta.Two},
+				{2, canasta.Hearts, canasta.Two},
+			},
+		},
+		{
+			name:      "too few cards",
+			topCard:   canasta.Card{0, canasta.Wild, canasta.Six},
+			playedIds: []int{1, 2},
+			playerHand: []canasta.Card{
+				{1, canasta.Clubs, canasta.Six},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hand := make(canasta.PlayerHand)
+			for _, card := range tt.playerHand {
+				hand[card.GetId()] = card
+			}
+			g := canasta.NewGame([]string{"A", "B", "C", "D"})
+			p := g.Players[0]
+			p.Team.GoneDown = true
+			for i := range 3 {
+				g.Hand.DiscardPile = append(g.Hand.DiscardPile, canasta.Card{i + 10, canasta.Spades, canasta.Three})
+			}
+			g.Hand.DiscardPile = append(g.Hand.DiscardPile, tt.topCard)
+			p.Hand = hand
 
+			err := g.PickUpDiscardPile(p, tt.playedIds)
+
+			if err == nil {
+				t.Error("Expected error")
+			}
+
+			if len(p.Team.Melds) != 0 {
+				t.Error("Should not create a meld")
+			}
+
+			if len(g.Hand.DiscardPile) != 4 {
+				t.Log(g.Hand.DiscardPile)
+				t.Error("Expected 4 cards in discard pile")
+			}
+
+			if len(p.Hand) != len(tt.playerHand) {
+				t.Log(p.Hand)
+				t.Error("Expected 2 cards to be in player's hand")
+			}
+
+			for _, card := range p.Hand {
+				if card.Rank == canasta.Three && tt.name != "pickup on black three" {
+					t.Error("Expected no threes in player's hand")
+				}
+			}
+		})
+	}
+}
+
+func TestGoingDownByPickingUpThePile(t *testing.T) {
+	tests := []struct {
+		name         string
+		topCard      canasta.Card
+		playedIds    []int
+		playerHand   []canasta.Card
+		stagingMelds []canasta.Meld
+	}{
+		{
+			name:      "regular cards no staging meld",
+			topCard:   canasta.Card{0, canasta.Spades, canasta.Ace},
+			playedIds: []int{1, 2},
+			playerHand: []canasta.Card{
+				{1, canasta.Clubs, canasta.Ace},
+				{2, canasta.Hearts, canasta.Ace},
+			},
+		},
+		{
+			name:      "regular cards with staging meld",
+			topCard:   canasta.Card{0, canasta.Spades, canasta.Four},
+			playedIds: []int{1, 2},
+			playerHand: []canasta.Card{
+				{1, canasta.Clubs, canasta.Four},
+				{2, canasta.Hearts, canasta.Four},
+			},
+			stagingMelds: []canasta.Meld{
+				{
+					Id:   3,
+					Rank: canasta.King,
+					Cards: []canasta.Card{
+						{3, canasta.Clubs, canasta.King},
+						{4, canasta.Hearts, canasta.King},
+						{5, canasta.Hearts, canasta.King},
+						{6, canasta.Hearts, canasta.King},
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hand := make(canasta.PlayerHand)
+			for _, card := range tt.playerHand {
+				hand[card.GetId()] = card
+			}
+			g := canasta.NewGame([]string{"A", "B", "C", "D"})
+			p := g.Players[0]
+			p.Team.GoneDown = false
+			for i := range 3 {
+				g.Hand.DiscardPile = append(g.Hand.DiscardPile, canasta.Card{i + 10, canasta.Spades, canasta.Three})
+			}
+			g.Hand.DiscardPile = append(g.Hand.DiscardPile, tt.topCard)
+			p.Hand = hand
+			p.StagingMelds = tt.stagingMelds
+
+			err := g.PickUpDiscardPile(p, tt.playedIds)
+
+			if err != nil {
+				t.Error(err)
+			}
+
+			if len(p.Team.Melds) == 0 {
+				t.Error("Expected meld to be created")
+			}
+
+			if len(g.Hand.DiscardPile) != 0 {
+				t.Error("Expected empty discard pile")
+			}
+
+			if len(p.Hand) != 3 {
+				t.Log(p.Hand)
+				t.Error("Expected 3 cards to be in player's hand")
+			}
+
+			for _, card := range p.Hand {
+				if card.Rank != canasta.Three {
+					t.Error("Expected all threes in player's hand")
+				}
+			}
+		})
+	}
 }

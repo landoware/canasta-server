@@ -411,6 +411,7 @@ func (p *Player) NewCanasta(meldIndex int) {
 	remainingMelds := slices.Delete(p.Team.Melds, meldIndex, meldIndex+1)
 
 	p.Team.Melds = remainingMelds
+	p.MadeCanasta = true
 }
 
 func (p *Player) BurnCard(cardIds []int, canastaId int) error {
@@ -474,6 +475,61 @@ func (p Player) CanPickUpDiscardPile(topCard Card) bool {
 	return true
 }
 
-func (g *Game) PickUpDiscardPile(p *Player, cardIds []int) {
+func (g *Game) PickUpDiscardPile(p *Player, cardIds []int) error {
+	if len(cardIds) < 2 {
+		return errors.New("Must provide at least two cards to make a new meld")
+	}
 
+	topCard := g.Hand.DiscardPile[len(g.Hand.DiscardPile)-1]
+	if topCard.Rank == Three {
+		return errors.New("Cannot pickup the pile with a black three")
+	}
+
+	for _, cardId := range cardIds {
+		if p.Hand[cardId].Rank != topCard.Rank && !p.Hand[cardId].IsWild() && !topCard.IsWild() {
+			return fmt.Errorf("New meld must be created with %ss", topCard.Rank.String())
+		}
+		if topCard.IsWild() && !p.Hand[cardId].IsWild() {
+			return errors.New("New meld must be created with wildcards")
+		}
+	}
+
+	// Must meet meld requirements with staging meld point + this new meld's points
+	if !p.Team.GoneDown {
+		pointsRequired := meldRequirements[g.HandNumber]
+		score := 0
+		for _, meld := range p.StagingMelds {
+			score += meld.Score()
+		}
+		for _, cardId := range cardIds {
+			score += p.Hand[cardId].Value()
+		}
+		score += topCard.Value()
+
+		if score < pointsRequired {
+			return fmt.Errorf("Cannot go down with fewer than %d points. You have %d points between your staging melds and the new meld.", pointsRequired, score)
+		}
+	}
+
+	p.Hand[topCard.GetId()] = topCard
+	cardIds = append(cardIds, topCard.GetId())
+
+	err := p.NewMeld(cardIds)
+	if err != nil {
+		// Take the card out of their hand
+		delete(p.Hand, topCard.GetId())
+		return err
+	}
+
+	if !p.Team.GoneDown {
+		g.GoDown(p)
+	}
+
+	for _, card := range g.Hand.DiscardPile {
+		p.Hand[card.GetId()] = card
+	}
+	delete(p.Hand, topCard.GetId())
+	g.Hand.DiscardPile = []Card{}
+
+	return nil
 }
