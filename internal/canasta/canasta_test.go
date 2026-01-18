@@ -918,8 +918,6 @@ func TestValidGoDown(t *testing.T) {
 			a.StagingMelds = tt.playerAStaging
 			a.Hand = aHand
 
-			// partnerStagingMeldInitLength := len(tt.playerCStaging)
-
 			c := g.Players[2]
 			c.StagingMelds = tt.playerCStaging
 
@@ -1029,9 +1027,155 @@ func TestStagingMeldToCanasta(t *testing.T) {
 }
 
 func TestInvalidGoDown(t *testing.T) {
-	// When invalid
-	// Assert both player's staging meld remains unchanged
+	tests := []struct {
+		name           string
+		playerAStaging []canasta.Meld
+		playerAHand    []canasta.Card
+		playerCStaging []canasta.Meld
+		playerCHand    []canasta.Card
+	}{
+		{
+			name:        "not enough points",
+			playerAHand: make([]canasta.Card, 0),
+			playerAStaging: []canasta.Meld{{
+				Id: 0,
+				Cards: []canasta.Card{
+					{0, canasta.Hearts, canasta.Five},
+					{1, canasta.Hearts, canasta.Five},
+					{2, canasta.Hearts, canasta.Five},
+				},
+				Rank:      canasta.Five,
+				WildCount: 0,
+			}},
+			playerCHand:    make([]canasta.Card, 0),
+			playerCStaging: make([]canasta.Meld, 0),
+		},
+		{
+			name:        "partner has one staging meld",
+			playerAHand: make([]canasta.Card, 0),
+			playerAStaging: []canasta.Meld{{
+				Id: 0,
+				Cards: []canasta.Card{
+					{0, canasta.Hearts, canasta.Five},
+					{1, canasta.Hearts, canasta.Five},
+					{2, canasta.Hearts, canasta.Five},
+				},
+				Rank:      canasta.Wild,
+				WildCount: 3,
+			}},
+			playerCHand: make([]canasta.Card, 0),
+			playerCStaging: []canasta.Meld{{
+				Id: 3,
+				Cards: []canasta.Card{
+					{3, canasta.Diamonds, canasta.Seven},
+					{4, canasta.Hearts, canasta.Seven},
+					{5, canasta.Clubs, canasta.Seven},
+				},
+				Rank:      canasta.Seven,
+				WildCount: 0,
+			}},
+		},
+		{
+			name:        "partner has multiple staging melds",
+			playerAHand: make([]canasta.Card, 0),
+			playerAStaging: []canasta.Meld{{
+				Id: 0,
+				Cards: []canasta.Card{
+					{0, canasta.Hearts, canasta.Five},
+					{1, canasta.Hearts, canasta.Five},
+					{2, canasta.Hearts, canasta.Five},
+				},
+				Rank:      canasta.Wild,
+				WildCount: 3,
+			}},
+			playerCHand: make([]canasta.Card, 0),
+			playerCStaging: []canasta.Meld{
+				{
+					Id: 3,
+					Cards: []canasta.Card{
+						{3, canasta.Diamonds, canasta.Seven},
+						{4, canasta.Hearts, canasta.Seven},
+						{5, canasta.Clubs, canasta.Seven},
+					},
+					Rank:      canasta.Seven,
+					WildCount: 0,
+				},
+				{
+					Id: 3,
+					Cards: []canasta.Card{
+						{6, canasta.Diamonds, canasta.Four},
+						{7, canasta.Hearts, canasta.Four},
+						{8, canasta.Clubs, canasta.Four},
+					},
+					Rank:      canasta.Four,
+					WildCount: 0,
+				},
+			},
+		},
+	}
 
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			aHand := make(canasta.PlayerHand)
+			cHand := make(canasta.PlayerHand)
+
+			for _, card := range tt.playerAHand {
+				aHand[card.GetId()] = card
+			}
+			for _, card := range tt.playerCHand {
+				cHand[card.GetId()] = card
+			}
+
+			g := canasta.NewGame([]string{"A", "B", "C", "D"})
+
+			a := g.Players[0]
+			a.StagingMelds = tt.playerAStaging
+			a.Hand = aHand
+
+			c := g.Players[2]
+			c.StagingMelds = tt.playerCStaging
+
+			err := g.GoDown(a)
+
+			if err == nil {
+				t.Log("Expected error")
+			}
+
+			if a.Team.GoneDown {
+				t.Error("Team flag updated")
+			}
+
+			// Assert no new melds created
+			if len(a.Team.Melds) != 0 {
+				t.Log(a.Team.Melds)
+				t.Error("Meld(s) created")
+			}
+
+			if len(a.StagingMelds) == 0 {
+				t.Error("Should not clear player's staging melds")
+			}
+
+			// Assert player's hand has no cards removed
+			if len(tt.playerAHand) != len(a.Hand) {
+				t.Error("Should not change player's hand")
+			}
+
+			// Assert partner's hand had staaging melds moved to their hand
+			if len(tt.playerCHand) != len(c.Hand) {
+				t.Error("Should not change partner's hand")
+			}
+
+			// Assert partner's staging hand is empty
+			if len(tt.playerCStaging) != 0 && len(c.StagingMelds) == 0 {
+				t.Error("Should not remove teamamate's staging melds")
+			}
+
+			// Assert a canasta was not created
+			if len(a.Team.Canastas) != 0 {
+				t.Error("Should not have created a canasta")
+			}
+		})
+	}
 }
 
 func TestBurnCard(t *testing.T) {
