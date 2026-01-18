@@ -6,28 +6,6 @@ import (
 	"slices"
 )
 
-type MoveType string
-
-const (
-	// Draw phase
-	MoveDrawFromDeck      MoveType = "draw_from_deck"
-	MovePickupDiscardPile MoveType = "pickup_discard_pile"
-
-	// Play phase
-	MoveCreateMeld MoveType = "create_meld"
-	MoveAddToMeld  MoveType = "add_to_meld"
-	MoveBurnCard   MoveType = "burn_card"
-	MoveGoDown     MoveType = "go_down"
-
-	// End phase moves
-	MoveDiscard MoveType = "discard"
-
-	// Special moves
-	MoveAskToGoOut   MoveType = "ask_to_go_out"
-	MoveRespondGoOut MoveType = "respond_go_out"
-	MovePickupFoot   MoveType = "pickup_foot"
-)
-
 /*
  * Draw Phase
  */
@@ -38,6 +16,8 @@ func (g *Game) DrawFromDeck(p *Player) {
 	for _, card := range cards {
 		p.Hand[card.GetId()] = card
 	}
+
+	g.Phase = PhasePlaying
 }
 
 func (g *Game) PickUpDiscardPile(p *Player, cardIds []int) error {
@@ -96,6 +76,7 @@ func (g *Game) PickUpDiscardPile(p *Player, cardIds []int) error {
 	delete(p.Hand, topCard.GetId())
 	g.Hand.DiscardPile = []Card{}
 
+	g.Phase = PhasePlaying
 	return nil
 }
 
@@ -254,11 +235,12 @@ func (g *Game) Discard(p *Player, cardId int) error {
 	p.Hand.removeCards([]int{cardId})
 	g.Hand.DiscardPile = append(g.Hand.DiscardPile, card)
 
-	if p.Team.CanGoOut && len(
-		p.Hand) == 0 {
+	if p.Team.CanGoOut && len(p.Hand) == 0 {
 		g.EndHand()
 	}
 
+	g.Phase = PhaseDrawing
+	g.CurrentPlayer = (g.CurrentPlayer + 1) % 4
 	return nil
 }
 

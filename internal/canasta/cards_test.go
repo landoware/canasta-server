@@ -39,7 +39,7 @@ func TestBuildDeck(t *testing.T) {
 	}
 }
 
-func TestDraw(t *testing.T) {
+func TestDrawDeckMethod(t *testing.T) {
 	deck := canasta.NewDeck()
 	drawnCards := deck.Draw(3)
 

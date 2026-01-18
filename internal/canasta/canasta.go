@@ -6,13 +6,22 @@ import (
 )
 
 type Game struct {
-	Id         string    `json:"id"`
-	Players    []*Player `json:"players"`
-	TeamA      *Team     `json:"teamA"`
-	TeamB      *Team     `json:"teamB"`
-	Hand       *Hand     `json:"hand"`
-	HandNumber int       `json:"handNumber"`
+	Id            string    `json:"id"`
+	Players       []*Player `json:"players"`
+	TeamA         *Team     `json:"teamA"`
+	TeamB         *Team     `json:"teamB"`
+	Hand          *Hand     `json:"hand"`
+	HandNumber    int       `json:"handNumber"`
+	CurrentPlayer int
+	Phase         TurnPhase
 }
+
+type TurnPhase string
+
+const (
+	PhaseDrawing TurnPhase = "drawing"
+	PhasePlaying TurnPhase = "playing"
+)
 
 type Hand struct {
 	Deck        *Deck  `json:"deck"`

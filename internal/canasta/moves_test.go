@@ -5,6 +5,26 @@ import (
 	"testing"
 )
 
+func TestDraw(t *testing.T) {
+	g := canasta.NewGame([]string{"A", "B", "C", "D"})
+	p := g.Players[0]
+
+	startingHandLength := len(p.Hand)
+	startingDeckLength := g.Hand.Deck.Count()
+
+	g.DrawFromDeck(p)
+
+	if len(p.Hand) != startingHandLength+2 {
+		t.Error("Did not increase player's card count")
+	}
+	if g.Hand.Deck.Count() != startingDeckLength-2 {
+		t.Error("Cards remaining in deck")
+	}
+	if g.Phase != canasta.PhasePlaying {
+		t.Error("Phase did not advance")
+	}
+}
+
 func TestNewMeld(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -858,6 +878,10 @@ func TestValidPickupDiscardPile(t *testing.T) {
 					t.Error("Expected all threes in player's hand")
 				}
 			}
+
+			if g.Phase != canasta.PhasePlaying {
+				t.Error("Phase did not advance")
+			}
 		})
 	}
 }
@@ -944,6 +968,10 @@ func TestInvalidPickupDiscardPile(t *testing.T) {
 				if card.Rank == canasta.Three && tt.name != "pickup on black three" {
 					t.Error("Expected no threes in player's hand")
 				}
+			}
+
+			if g.Phase == canasta.PhasePlaying {
+				t.Error("Phase should not advance")
 			}
 		})
 	}
@@ -1069,6 +1097,106 @@ func TestPickupFoot(t *testing.T) {
 					t.Error("Should not have added to player's hand")
 				}
 
+			}
+		})
+	}
+}
+
+func TestDiscard(t *testing.T) {
+	tests := []struct {
+		name          string
+		hand          []canasta.Card
+		discardedCard int
+		canGoOut      bool
+		valid         bool
+	}{
+		{
+			name: "normal discard",
+			hand: []canasta.Card{
+				{0, canasta.Clubs, canasta.Ace},
+				{1, canasta.Clubs, canasta.Three},
+			},
+			discardedCard: 1,
+			canGoOut:      false,
+			valid:         true,
+		},
+		{
+			name: "going out",
+			hand: []canasta.Card{
+				{1, canasta.Clubs, canasta.Three},
+			},
+			discardedCard: 1,
+			canGoOut:      true,
+			valid:         true,
+		},
+		{
+			name: "going out too early",
+			hand: []canasta.Card{
+				{1, canasta.Clubs, canasta.Three},
+			},
+			discardedCard: 1,
+			canGoOut:      false,
+			valid:         false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			game := canasta.NewGame([]string{"A", "B", "C", "D"})
+
+			hand := make(canasta.PlayerHand)
+			for _, card := range tt.hand {
+				hand[card.GetId()] = card
+			}
+
+			game.CurrentPlayer = 3
+			player := game.Players[3]
+			player.Hand = hand
+			player.Team.CanGoOut = tt.canGoOut
+
+			err := game.Discard(player, tt.discardedCard)
+
+			if tt.valid && err != nil {
+				t.Log(err)
+				t.FailNow()
+			}
+			if !tt.valid && err == nil {
+				t.Log("expected error")
+				t.FailNow()
+			}
+
+			if tt.valid && game.Phase != canasta.PhaseDrawing {
+				t.Error("Expected phase to reset")
+			}
+
+			if !tt.valid && game.Phase == canasta.PhaseDrawing {
+				t.Error("Phase should not have reset")
+			}
+
+			if tt.valid && game.CurrentPlayer == 3 {
+				t.Log(game.CurrentPlayer)
+				t.Error("Turn should advance")
+			}
+
+			if !tt.valid && game.CurrentPlayer != 3 {
+				t.Log(game.CurrentPlayer)
+				t.Error("Turn should not advance")
+			}
+
+			if tt.valid && len(player.Hand) != len(tt.hand)-1 && game.HandNumber == 1 {
+				t.Log(game.HandNumber)
+				t.Log(player.Hand)
+				t.Error("Expected card to be discarded from hand")
+			}
+
+			if tt.valid && len(game.Hand.DiscardPile) < 1 {
+				t.Log(game.Hand.DiscardPile)
+				t.Error("Expected additional card in the discard pile")
+			}
+
+			if !tt.valid && len(game.Hand.DiscardPile) > 1 {
+				t.Log(game.Hand.DiscardPile)
+				t.Error("Unexpected discard")
 			}
 		})
 	}
