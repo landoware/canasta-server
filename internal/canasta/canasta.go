@@ -269,8 +269,8 @@ func (p *Player) ValidateMeld(cardIds []int) (meld Meld, err error) {
 	allWilds := true
 	var rank Rank
 
-	for _, handIndex := range cardIds {
-		card := p.Hand[handIndex]
+	for _, cardId := range cardIds {
+		card := p.Hand[cardId]
 
 		// Can't use a three for a canasta
 		if card.Rank == Three {
@@ -326,8 +326,8 @@ func (p *Player) AddToMeld(cardIds []int, meldId int) error {
 
 	meld := &p.Team.Melds[meldIndex]
 
-	for _, handIndex := range cardIds {
-		card := p.Hand[handIndex]
+	for _, cardId := range cardIds {
+		card := p.Hand[cardId]
 		if card.Rank != meld.Rank && !card.IsWild() {
 			return errors.New("Card does not match this meld")
 		}
@@ -344,7 +344,7 @@ func (p *Player) AddToMeld(cardIds []int, meldId int) error {
 				return errors.New("Cannot add more wildcards to this Meld")
 			}
 		}
-		cards = append(cards, p.Hand[handIndex])
+		cards = append(cards, p.Hand[cardId])
 	}
 
 	meld.Cards = append(meld.Cards, cards...)
@@ -413,8 +413,40 @@ func (p *Player) NewCanasta(meldIndex int) {
 	p.Team.Melds = remainingMelds
 }
 
-func (p *Player) BurnCard(canastaId int) {
+func (p *Player) BurnCard(cardIds []int, canastaId int) error {
+	// Can you burn a wildcard on a natural to make it unnatural?
 
+	canastaIndex, err := findIndex(canastaId, p.Team.Canastas)
+	if err != nil {
+		return err
+	}
+
+	for _, cardId := range cardIds {
+		card := p.Hand[cardId]
+		if card.Rank != p.Team.Canastas[canastaIndex].Rank && !card.IsWild() {
+			return errors.New("Card does not match this meld")
+		}
+		if p.Team.Canastas[canastaIndex].Rank == Three {
+			return errors.New("Cannot use threes in melds")
+		}
+		if p.Team.Canastas[canastaIndex].Rank == Seven && card.IsWild() {
+			return errors.New("Cannot use wildcards in a Sevens meld")
+		}
+
+		wildcards := WildCount(p.Team.Canastas[canastaIndex].Cards)
+		if card.IsWild() {
+			wildcards++
+			if wildcards > 3 {
+				return errors.New("Cannot add more wildcards to this Meld")
+			}
+		}
+
+		p.Team.Canastas[canastaIndex].Cards = append(p.Team.Canastas[canastaIndex].Cards, p.Hand[cardId])
+		p.Team.Canastas[canastaIndex].Count++
+	}
+	p.Hand.removeCards(cardIds)
+
+	return nil
 }
 
 func (g *Game) Discard(p *Player, cardId int) error {

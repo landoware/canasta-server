@@ -1178,8 +1178,161 @@ func TestInvalidGoDown(t *testing.T) {
 	}
 }
 
-func TestBurnCard(t *testing.T) {
+func TestValidBurnCard(t *testing.T) {
+	tests := []struct {
+		name        string
+		playerHand  []canasta.Card
+		cardsToBurn []int
+		teamCanasta canasta.Canasta
+	}{
+		{
+			name: "burn a card",
+			playerHand: []canasta.Card{
+				{7, canasta.Clubs, canasta.Seven},
+			},
+			cardsToBurn: []int{7},
+			teamCanasta: canasta.Canasta{
+				Id:   0,
+				Rank: canasta.Seven,
+				Cards: []canasta.Card{
+					{0, canasta.Clubs, canasta.Seven},
+					{1, canasta.Diamonds, canasta.Seven},
+					{2, canasta.Hearts, canasta.Seven},
+					{3, canasta.Spades, canasta.Seven},
+					{4, canasta.Diamonds, canasta.Seven},
+					{5, canasta.Clubs, canasta.Seven},
+					{6, canasta.Hearts, canasta.Seven},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hand := make(canasta.PlayerHand)
+			for _, card := range tt.playerHand {
+				hand[card.GetId()] = card
+			}
+			g := canasta.NewGame([]string{"A", "B", "C", "D"})
+			p := g.Players[0]
+			p.Hand = hand
+			p.Team.Canastas = append(p.Team.Canastas, tt.teamCanasta)
 
+			err := p.BurnCard(tt.cardsToBurn, 0)
+
+			if err != nil {
+				t.Log(err)
+				t.FailNow()
+			}
+
+			if len(p.Team.Canastas) != 1 {
+				t.Error("No cannasta!")
+				t.FailNow()
+			}
+
+			if len(p.Team.Canastas[0].Cards) != len(tt.cardsToBurn)+len(tt.teamCanasta.Cards) {
+				t.Error("Did not burn the right number of cards")
+			}
+
+		})
+
+	}
+}
+
+func TestInalidBurnCard(t *testing.T) {
+	tests := []struct {
+		name        string
+		playerHand  []canasta.Card
+		cardsToBurn []int
+		teamCanasta canasta.Canasta
+	}{
+		{
+			name: "burn a wild on sevens",
+			playerHand: []canasta.Card{
+				{7, canasta.Wild, canasta.Joker},
+			},
+			cardsToBurn: []int{7},
+			teamCanasta: canasta.Canasta{
+				Id:   0,
+				Rank: canasta.Seven,
+				Cards: []canasta.Card{
+					{0, canasta.Clubs, canasta.Seven},
+					{1, canasta.Diamonds, canasta.Seven},
+					{2, canasta.Hearts, canasta.Seven},
+					{3, canasta.Spades, canasta.Seven},
+					{4, canasta.Diamonds, canasta.Seven},
+					{5, canasta.Clubs, canasta.Seven},
+					{6, canasta.Hearts, canasta.Seven},
+				},
+			},
+		},
+		{
+			name: "burn the wrong rank",
+			playerHand: []canasta.Card{
+				{7, canasta.Diamonds, canasta.Seven},
+			},
+			cardsToBurn: []int{7},
+			teamCanasta: canasta.Canasta{
+				Id:   0,
+				Rank: canasta.Six,
+				Cards: []canasta.Card{
+					{0, canasta.Clubs, canasta.Six},
+					{1, canasta.Diamonds, canasta.Six},
+					{2, canasta.Hearts, canasta.Six},
+					{3, canasta.Spades, canasta.Six},
+					{4, canasta.Diamonds, canasta.Six},
+					{5, canasta.Clubs, canasta.Six},
+					{6, canasta.Hearts, canasta.Six},
+				},
+			},
+		},
+		{
+			name: "burn too many wilds",
+			playerHand: []canasta.Card{
+				{7, canasta.Wild, canasta.Joker},
+			},
+			cardsToBurn: []int{7},
+			teamCanasta: canasta.Canasta{
+				Id:   0,
+				Rank: canasta.King,
+				Cards: []canasta.Card{
+					{0, canasta.Clubs, canasta.King},
+					{1, canasta.Diamonds, canasta.King},
+					{2, canasta.Hearts, canasta.King},
+					{3, canasta.Spades, canasta.King},
+					{4, canasta.Diamonds, canasta.Two},
+					{5, canasta.Clubs, canasta.Two},
+					{6, canasta.Hearts, canasta.Two},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hand := make(canasta.PlayerHand)
+			for _, card := range tt.playerHand {
+				hand[card.GetId()] = card
+			}
+			g := canasta.NewGame([]string{"A", "B", "C", "D"})
+			p := g.Players[0]
+			p.Hand = hand
+			p.Team.Canastas = append(p.Team.Canastas, tt.teamCanasta)
+
+			err := p.BurnCard(tt.cardsToBurn, 0)
+
+			if err == nil {
+				t.Error("Expected error")
+			}
+
+			if len(p.Team.Canastas) != 1 {
+				t.Error("No cannasta!")
+				t.FailNow()
+			}
+
+			if len(p.Team.Canastas[0].Cards) == len(tt.cardsToBurn)+len(tt.teamCanasta.Cards) {
+				t.Error("Should not burn any cards")
+			}
+		})
+	}
 }
 
 func TestCanPickupDiscardPile(t *testing.T) {
