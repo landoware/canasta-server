@@ -244,19 +244,18 @@ func (p *Player) NewMeld(cardIds []int) error {
 
 	// Cool let's do it then
 	if p.Team.GoneDown {
-		p.Hand.removeCards(cardIds)
 		p.Team.Melds = append(p.Team.Melds, meld)
 
 		if len(meld.Cards) >= 7 {
 			p.NewCanasta(len(p.Team.Melds) - 1)
 		}
-
-		return nil
 	} else {
 		// Add it to the player's "staging" melds.
 		p.StagingMelds = append(p.StagingMelds, meld)
-		return nil
 	}
+	// No cards for you
+	p.Hand.removeCards(cardIds)
+	return nil
 }
 
 func (p *Player) ValidateMeld(cardIds []int) (meld Meld, err error) {

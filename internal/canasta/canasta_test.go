@@ -731,10 +731,6 @@ func TestAddSevenCardsToMeld(t *testing.T) {
 	}
 }
 
-func TestCanDiscard(t *testing.T) {
-
-}
-
 func TestDiscard(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -814,10 +810,6 @@ func TestDiscard(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestAddToStagingMeld(t *testing.T) {
-
 }
 
 func TestValidGoDown(t *testing.T) {
@@ -947,6 +939,12 @@ func TestValidGoDown(t *testing.T) {
 			}
 
 			// Assert player's hand has cards removed
+			if len(a.Hand) != 0 {
+				t.Log(a.Hand)
+				t.Log("Player had cards added to their hand")
+			}
+
+			// Assert player's staging melds are removed
 			if len(a.StagingMelds) != 0 {
 				t.Error("Did not clear player's staging melds")
 			}
@@ -1026,8 +1024,6 @@ func TestStagingMeldToCanasta(t *testing.T) {
 			if len(a.Team.Canastas) == 0 {
 				t.Error("Expected canasta to be created")
 			}
-
-			t.Logf("Melds %v", a.Team.Melds)
 		})
 	}
 }
