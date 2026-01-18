@@ -53,10 +53,11 @@ func (m Meld) Score() (score int) {
 }
 
 type Canasta struct {
-	Id    int    `json:"id"`
-	Rank  Rank   `json:"rank"`
-	Cards []Card `json:"cards"`
-	Count int    `json:"count"`
+	Id      int    `json:"id"`
+	Rank    Rank   `json:"rank"`
+	Cards   []Card `json:"cards"`
+	Count   int    `json:"count"`
+	Natural bool   `json:"natural"`
 }
 
 func (c Canasta) GetId() int { return c.Id }
@@ -401,11 +402,16 @@ func (g *Game) GoDown(p *Player) error {
 func (p *Player) NewCanasta(meldIndex int) {
 
 	meld := p.Team.Melds[meldIndex]
+	natural := true
+	if meld.WildCount > 0 {
+		natural = false
+	}
 
 	p.Team.Canastas = append(p.Team.Canastas, Canasta{
-		Rank:  meld.Rank,
-		Cards: meld.Cards,
-		Count: len(meld.Cards),
+		Rank:    meld.Rank,
+		Cards:   meld.Cards,
+		Count:   len(meld.Cards),
+		Natural: natural,
 	})
 
 	remainingMelds := slices.Delete(p.Team.Melds, meldIndex, meldIndex+1)
@@ -414,9 +420,7 @@ func (p *Player) NewCanasta(meldIndex int) {
 	p.MadeCanasta = true
 }
 
-func (p *Player) BurnCard(cardIds []int, canastaId int) error {
-	// Can you burn a wildcard on a natural to make it unnatural?
-
+func (p *Player) BurnCards(cardIds []int, canastaId int) error {
 	canastaIndex, err := findIndex(canastaId, p.Team.Canastas)
 	if err != nil {
 		return err
@@ -424,6 +428,9 @@ func (p *Player) BurnCard(cardIds []int, canastaId int) error {
 
 	for _, cardId := range cardIds {
 		card := p.Hand[cardId]
+		if card.IsWild() && p.Team.Canastas[canastaIndex].Natural {
+			return errors.New("Cannot make a natural canasta unnatural")
+		}
 		if card.Rank != p.Team.Canastas[canastaIndex].Rank && !card.IsWild() {
 			return errors.New("Card does not match this meld")
 		}

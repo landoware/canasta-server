@@ -1178,7 +1178,7 @@ func TestInvalidGoDown(t *testing.T) {
 	}
 }
 
-func TestValidBurnCard(t *testing.T) {
+func TestValidBurnCards(t *testing.T) {
 	tests := []struct {
 		name        string
 		playerHand  []canasta.Card
@@ -1217,7 +1217,7 @@ func TestValidBurnCard(t *testing.T) {
 			p.Hand = hand
 			p.Team.Canastas = append(p.Team.Canastas, tt.teamCanasta)
 
-			err := p.BurnCard(tt.cardsToBurn, 0)
+			err := p.BurnCards(tt.cardsToBurn, 0)
 
 			if err != nil {
 				t.Log(err)
@@ -1238,7 +1238,7 @@ func TestValidBurnCard(t *testing.T) {
 	}
 }
 
-func TestInalidBurnCard(t *testing.T) {
+func TestInvalidBurnCards(t *testing.T) {
 	tests := []struct {
 		name        string
 		playerHand  []canasta.Card
@@ -1305,6 +1305,27 @@ func TestInalidBurnCard(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "burn wild on a natural",
+			playerHand: []canasta.Card{
+				{7, canasta.Wild, canasta.Joker},
+			},
+			cardsToBurn: []int{7},
+			teamCanasta: canasta.Canasta{
+				Id:      0,
+				Rank:    canasta.King,
+				Natural: true,
+				Cards: []canasta.Card{
+					{0, canasta.Clubs, canasta.King},
+					{1, canasta.Diamonds, canasta.King},
+					{2, canasta.Hearts, canasta.King},
+					{3, canasta.Spades, canasta.King},
+					{4, canasta.Diamonds, canasta.King},
+					{5, canasta.Clubs, canasta.King},
+					{6, canasta.Hearts, canasta.King},
+				},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1317,7 +1338,7 @@ func TestInalidBurnCard(t *testing.T) {
 			p.Hand = hand
 			p.Team.Canastas = append(p.Team.Canastas, tt.teamCanasta)
 
-			err := p.BurnCard(tt.cardsToBurn, 0)
+			err := p.BurnCards(tt.cardsToBurn, 0)
 
 			if err == nil {
 				t.Error("Expected error")
