@@ -4,7 +4,30 @@ import (
 	"canasta-server/internal/canasta"
 	"slices"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
+
+func TestNewGame(t *testing.T) {
+	assert := assert.New(t)
+
+	// Radomize order by default
+	g1 := canasta.NewGame("ACDE", []string{"A", "B", "C", "D"})
+	gameOrder := []string{}
+	for _, player := range g1.Players {
+		gameOrder = append(gameOrder, player.Name)
+	}
+
+	assert.NotEqual([]string{"A", "B", "C", "D"}, gameOrder)
+
+	g2 := canasta.NewGame("ACDE", []string{"A", "B", "C", "D"}, canasta.WithFixedTeamOrder())
+	gameOrder = []string{}
+	for _, player := range g2.Players {
+		gameOrder = append(gameOrder, player.Name)
+	}
+
+	assert.Equal([]string{"A", "B", "C", "D"}, gameOrder)
+}
 
 func TestDeal(t *testing.T) {
 	names := []string{"One", "Two", "Three", "Four"}

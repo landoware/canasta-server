@@ -113,7 +113,24 @@ func findIndex[T HasId](id int, slice []T) (index int, err error) {
 	return -1, errors.New("Not found")
 }
 
-func NewGame(id string, playerNames []string) Game {
+type GameConfig struct {
+	RandomTeamOrder bool
+}
+
+type GameOption func(*GameConfig)
+
+func WithFixedTeamOrder() GameOption {
+	return func(c *GameConfig) {
+		c.RandomTeamOrder = false
+	}
+}
+
+func NewGame(id string, playerNames []string, options ...GameOption) Game {
+	config := &GameConfig{RandomTeamOrder: true}
+	for _, option := range options {
+		option(config)
+	}
+
 	teamA := Team{
 		Score:     0,
 		Melds:     make([]Meld, 0),
@@ -131,27 +148,29 @@ func NewGame(id string, playerNames []string) Game {
 		RedThrees: make([]Card, 0),
 	}
 
-	// Randomize playing order, preserving partner position
-	a := []string{playerNames[0], playerNames[1]}
-	rand.Shuffle(len(a), func(i, j int) {
-		a[i], a[j] = a[j], a[i]
-	})
-	b := []string{playerNames[1], playerNames[2]}
-	rand.Shuffle(len(a), func(i, j int) {
-		b[i], b[j] = b[j], b[i]
-	})
+	if config.RandomTeamOrder {
+		// Randomize playing order, preserving partner position
+		a := []string{playerNames[0], playerNames[1]}
+		rand.Shuffle(len(a), func(i, j int) {
+			a[i], a[j] = a[j], a[i]
+		})
+		b := []string{playerNames[1], playerNames[2]}
+		rand.Shuffle(len(a), func(i, j int) {
+			b[i], b[j] = b[j], b[i]
+		})
 
-	firstTeam := rand.Int() % 2
-	if firstTeam == 0 {
-		playerNames[0] = a[0]
-		playerNames[1] = b[0]
-		playerNames[2] = a[1]
-		playerNames[3] = b[1]
-	} else {
-		playerNames[0] = b[0]
-		playerNames[1] = a[0]
-		playerNames[2] = b[1]
-		playerNames[3] = a[1]
+		firstTeam := rand.Int() % 2
+		if firstTeam == 0 {
+			playerNames[0] = a[0]
+			playerNames[1] = b[0]
+			playerNames[2] = a[1]
+			playerNames[3] = b[1]
+		} else {
+			playerNames[0] = b[0]
+			playerNames[1] = a[0]
+			playerNames[2] = b[1]
+			playerNames[3] = a[1]
+		}
 	}
 
 	players := make([]*Player, 0)
