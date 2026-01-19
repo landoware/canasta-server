@@ -8,7 +8,7 @@ import (
 
 func TestDeal(t *testing.T) {
 	names := []string{"One", "Two", "Three", "Four"}
-	game := canasta.NewGame(names)
+	game := canasta.NewGame("ABCE", names)
 
 	game.Deal()
 
@@ -243,7 +243,7 @@ func TestValidGoDown(t *testing.T) {
 				cHand[card.GetId()] = card
 			}
 
-			g := canasta.NewGame([]string{"A", "B", "C", "D"})
+			g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
 
 			a := g.Players[0]
 			a.StagingMelds = tt.playerAStaging
@@ -334,7 +334,7 @@ func TestStagingMeldToCanasta(t *testing.T) {
 				aHand[card.GetId()] = card
 			}
 
-			g := canasta.NewGame([]string{"A", "B", "C", "D"})
+			g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
 
 			a := g.Players[0]
 			a.StagingMelds = tt.playerAStaging
@@ -457,7 +457,7 @@ func TestInvalidGoDown(t *testing.T) {
 				cHand[card.GetId()] = card
 			}
 
-			g := canasta.NewGame([]string{"A", "B", "C", "D"})
+			g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
 
 			a := g.Players[0]
 			a.StagingMelds = tt.playerAStaging
@@ -799,7 +799,7 @@ func TestGameScore(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			g := canasta.NewGame([]string{"A", "B", "C", "D"})
+			g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
 
 			// Set up Team A
 			g.TeamA.Melds = tt.teamAMelds

@@ -6,7 +6,7 @@ import (
 )
 
 func TestDraw(t *testing.T) {
-	g := canasta.NewGame([]string{"A", "B", "C", "D"})
+	g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
 	p := g.Players[0]
 
 	startingHandLength := len(p.Hand)
@@ -26,7 +26,7 @@ func TestDraw(t *testing.T) {
 }
 
 func TestDrawRedThree(t *testing.T) {
-	g := canasta.NewGame([]string{"A", "B", "C", "D"})
+	g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
 	p := g.Players[0]
 
 	startingHandLength := len(p.Hand)
@@ -175,7 +175,7 @@ func TestNewMeld(t *testing.T) {
 				cardsToPlay = append(cardsToPlay, card.GetId())
 			}
 
-			g := canasta.NewGame([]string{"A", "B", "C", "D"})
+			g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
 
 			g.Players[0] = &canasta.Player{
 				Name: tt.name,
@@ -326,7 +326,7 @@ func TestAddToMeld(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			hand := make(canasta.PlayerHand)
 
-			game := canasta.NewGame([]string{"A", "B", "C", "D"})
+			game := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
 
 			for _, card := range tt.hand {
 				hand[card.GetId()] = card
@@ -467,7 +467,7 @@ func TestAddToMeldCreatesACanasta(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			game := canasta.NewGame([]string{"A", "B", "C", "D"})
+			game := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
 
 			hand := make(canasta.PlayerHand)
 			for _, card := range tt.hand {
@@ -600,7 +600,7 @@ func TestAddSevenCardsToMeld(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			game := canasta.NewGame([]string{"A", "B", "C", "D"})
+			game := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
 
 			hand := make(canasta.PlayerHand)
 			for _, card := range tt.hand {
@@ -677,7 +677,7 @@ func TestValidBurnCards(t *testing.T) {
 			for _, card := range tt.playerHand {
 				hand[card.GetId()] = card
 			}
-			g := canasta.NewGame([]string{"A", "B", "C", "D"})
+			g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
 			p := g.Players[0]
 			p.Hand = hand
 			p.Team.Canastas = append(p.Team.Canastas, tt.teamCanasta)
@@ -798,7 +798,7 @@ func TestInvalidBurnCards(t *testing.T) {
 			for _, card := range tt.playerHand {
 				hand[card.GetId()] = card
 			}
-			g := canasta.NewGame([]string{"A", "B", "C", "D"})
+			g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
 			p := g.Players[0]
 			p.Hand = hand
 			p.Team.Canastas = append(p.Team.Canastas, tt.teamCanasta)
@@ -871,7 +871,7 @@ func TestValidPickupDiscardPile(t *testing.T) {
 			for _, card := range tt.playerHand {
 				hand[card.GetId()] = card
 			}
-			g := canasta.NewGame([]string{"A", "B", "C", "D"})
+			g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
 			p := g.Players[0]
 			p.Team.GoneDown = true
 			for i := range 3 {
@@ -961,7 +961,7 @@ func TestInvalidPickupDiscardPile(t *testing.T) {
 			for _, card := range tt.playerHand {
 				hand[card.GetId()] = card
 			}
-			g := canasta.NewGame([]string{"A", "B", "C", "D"})
+			g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
 			p := g.Players[0]
 			p.Team.GoneDown = true
 			for i := range 3 {
@@ -1048,7 +1048,7 @@ func TestGoingDownByPickingUpThePile(t *testing.T) {
 			for _, card := range tt.playerHand {
 				hand[card.GetId()] = card
 			}
-			g := canasta.NewGame([]string{"A", "B", "C", "D"})
+			g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
 			p := g.Players[0]
 			p.Team.GoneDown = false
 			for i := range 3 {
@@ -1096,7 +1096,7 @@ func TestPickupFoot(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			g := canasta.NewGame([]string{"A", "B", "C", "D"})
+			g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
 			g.Deal()
 
 			p := g.Players[0]
@@ -1168,7 +1168,7 @@ func TestDiscard(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			game := canasta.NewGame([]string{"A", "B", "C", "D"})
+			game := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
 
 			hand := make(canasta.PlayerHand)
 			for _, card := range tt.hand {

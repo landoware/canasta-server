@@ -2,6 +2,7 @@ package canasta
 
 import (
 	"errors"
+	"math/rand"
 	"slices"
 )
 
@@ -112,7 +113,7 @@ func findIndex[T HasId](id int, slice []T) (index int, err error) {
 	return -1, errors.New("Not found")
 }
 
-func NewGame(playerNames []string) Game {
+func NewGame(id string, playerNames []string) Game {
 	teamA := Team{
 		Score:     0,
 		Melds:     make([]Meld, 0),
@@ -128,6 +129,29 @@ func NewGame(playerNames []string) Game {
 		GoneDown:  false,
 		CanGoOut:  false,
 		RedThrees: make([]Card, 0),
+	}
+
+	// Randomize playing order, preserving partner position
+	a := []string{playerNames[0], playerNames[1]}
+	rand.Shuffle(len(a), func(i, j int) {
+		a[i], a[j] = a[j], a[i]
+	})
+	b := []string{playerNames[1], playerNames[2]}
+	rand.Shuffle(len(a), func(i, j int) {
+		b[i], b[j] = b[j], b[i]
+	})
+
+	firstTeam := rand.Int() % 2
+	if firstTeam == 0 {
+		playerNames[0] = a[0]
+		playerNames[1] = b[0]
+		playerNames[2] = a[1]
+		playerNames[3] = b[1]
+	} else {
+		playerNames[0] = b[0]
+		playerNames[1] = a[0]
+		playerNames[2] = b[1]
+		playerNames[3] = a[1]
 	}
 
 	players := make([]*Player, 0)
@@ -149,14 +173,15 @@ func NewGame(playerNames []string) Game {
 		}
 	}
 
-	teamMap := map[int]int{
+	partnerMap := map[int]int{
 		0: 2,
 		1: 3,
 		2: 0,
 		3: 1,
 	}
+
 	for i, player := range players {
-		player.partner = players[teamMap[i]]
+		player.partner = players[partnerMap[i]]
 	}
 
 	hand := &Hand{
@@ -167,7 +192,7 @@ func NewGame(playerNames []string) Game {
 	hand.Deck.Shuffle()
 
 	return Game{
-		Id:         getID(),
+		Id:         id,
 		TeamA:      &teamA,
 		TeamB:      &teamB,
 		Players:    players,
@@ -250,10 +275,6 @@ func (g Game) EndGame() {
 
 }
 
-func getID() string {
-	return "ABCD"
-}
-
 func (g *Game) Deal() {
 	// Deal the Hand
 	for range 15 {
@@ -273,4 +294,8 @@ func (g *Game) Deal() {
 	// Discard the top card
 	discard := g.Hand.Deck.Draw(1)[0]
 	g.Hand.DiscardPile = append(g.Hand.DiscardPile, discard)
+
+	// Initialize the turn
+	g.CurrentPlayer = (-1 + g.HandNumber) % 4
+	g.Phase = PhaseDrawing
 }
