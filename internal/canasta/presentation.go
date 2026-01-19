@@ -1,78 +1,65 @@
 package canasta
 
-// Move represents a single player action
-type Move struct {
-	Type      MoveType `json:"type" ts_type:"MoveType"`
-	PlayerID  string   `json:"playerId"`
-	CardIds   []int    `json:"cardIds,omitempty"`
-	MeldId    *int     `json:"meldId,omitempty"`
-	CanastaId *int     `json:"canastaId,omitempty"`
-	Response  *bool    `json:"response,omitempty"` // For yes/no responses (e.g., partner asking to go out)
+type ClientState struct {
+	DeckCount      int                `json:"deckCount"`
+	DiscardCount   int                `json:"discardCount"`
+	DiscardTopCard Card               `json:"discardTopCard"`
+	Name           string             `json:"name"`
+	Hand           PlayerHand         `json:"hand"`
+	HasFoot        bool               `json:"hasFoot"`
+	Players        []OtherPlayerState `json:"players"`
+	OurScore       int                `json:"ourScore"`
+	OurMelds       []Meld             `json:"ourMelds"`
+	OurCanastas    []Canasta          `json:"ourCanastas"`
+	OtherScore     int                `json:"otherScore"`
+	OtherMelds     []Meld             `json:"otherMelds"`
+	OtherCanastas  []Canasta          `json:"otherCanastas"`
 }
 
-// MoveRequest is what the client sends to the server via WebSocket
-type MoveRequest struct {
-	GameID string `json:"gameId"`
-	Move   Move   `json:"move"`
+type OtherPlayerState struct {
+	Name       string `json:"name"`
+	HandLength int    `json:"handLength"`
+	HasFoot    bool   `json:"hasFoot"`
 }
 
-// MoveResponse is what the server sends back to the client
-type MoveResponse struct {
-	Success   bool       `json:"success"`
-	Error     *MoveError `json:"error,omitempty"`
-	GameState *GameState `json:"gameState,omitempty"` // Filtered per player
-	Message   *string    `json:"message,omitempty"`
+func (g *Game) GetClientState(playerID int) *ClientState {
+	player := g.Players[playerID]
+
+	otherStates := []OtherPlayerState{}
+	for id, p := range g.Players {
+		if id != playerID {
+			otherStates = append(otherStates, GetOtherPlayerState(p))
+		}
+	}
+
+	melds := player.Team.Melds
+	if !player.Team.GoneDown {
+		melds = player.StagingMelds
+	}
+
+	opposingTeam := g.Players[(playerID+1)%4].Team
+
+	return &ClientState{
+		DeckCount:      g.Hand.Deck.Count(),
+		DiscardCount:   len(g.Hand.DiscardPile),
+		DiscardTopCard: g.Hand.DiscardPile[len(g.Hand.DiscardPile)-1],
+		Name:           player.Name,
+		Hand:           player.Hand,
+		HasFoot:        len(player.Foot) != 0,
+		Players:        otherStates,
+		OurScore:       player.Team.Score,
+		OurMelds:       melds,
+		OurCanastas:    player.Team.Canastas,
+		OtherScore:     opposingTeam.Score,
+		OtherMelds:     opposingTeam.Melds,
+		OtherCanastas:  opposingTeam.Canastas,
+	}
 }
 
-// MoveError represents specific error types for move validation
-type MoveError struct {
-	Code    MoveErrorCode `json:"code"`
-	Message string        `json:"message"`
-}
-
-type MoveErrorCode string
-
-const (
-	ErrNotYourTurn        MoveErrorCode = "not_your_turn"
-	ErrInvalidMove        MoveErrorCode = "invalid_move"
-	ErrInsufficientCards  MoveErrorCode = "insufficient_cards"
-	ErrInvalidMeld        MoveErrorCode = "invalid_meld"
-	ErrNotGoneDown        MoveErrorCode = "not_gone_down"
-	ErrInsufficientPoints MoveErrorCode = "insufficient_points"
-	ErrCannotPickupPile   MoveErrorCode = "cannot_pickup_pile"
-	ErrGameNotStarted     MoveErrorCode = "game_not_started"
-	ErrGameEnded          MoveErrorCode = "game_ended"
-	ErrInvalidPhase       MoveErrorCode = "invalid_phase"
-)
-
-// GameState represents the filtered game state sent to a specific player
-// (hides other players' hands)
-type GameState struct {
-	GameID           string       `json:"gameId"`
-	CurrentPlayer    int          `json:"currentPlayer"`
-	CurrentPhase     TurnPhase    `json:"currentPhase"`
-	HandNumber       int          `json:"handNumber"`
-	YourHand         []Card       `json:"yourHand"`
-	YourFoot         []Card       `json:"yourFoot,omitempty"`
-	YourStagingMelds []Meld       `json:"yourStagingMelds"`
-	Team1Score       int          `json:"team1Score"`
-	Team2Score       int          `json:"team2Score"`
-	Team1Melds       []Meld       `json:"team1Melds"`
-	Team2Melds       []Meld       `json:"team2Melds"`
-	Team1Canastas    []Canasta    `json:"team1Canastas"`
-	Team2Canastas    []Canasta    `json:"team2Canastas"`
-	DiscardPile      []Card       `json:"discardPile"`
-	DeckCount        int          `json:"deckCount"`
-	OtherPlayers     []PlayerInfo `json:"otherPlayers"`
-	ValidMoves       []MoveType   `json:"validMoves"` // Optional: list of valid moves for current player
-}
-
-// PlayerInfo represents minimal info about other players (no hand visibility)
-type PlayerInfo struct {
-	PlayerID      int    `json:"playerId"`
-	Name          string `json:"name"`
-	HandCount     int    `json:"handCount"`
-	FootCount     int    `json:"footCount"`
-	HasPickedFoot bool   `json:"hasPickedFoot"`
-	Team          int    `json:"team"`
+func GetOtherPlayerState(p *Player) OtherPlayerState {
+	return OtherPlayerState{
+		Name:       p.Name,
+		HandLength: len(p.Hand),
+		HasFoot:    len(p.Foot) != 0,
+	}
 }

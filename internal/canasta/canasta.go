@@ -222,7 +222,7 @@ func NewGame(id string, playerNames []string, options ...GameOption) Game {
 
 func (g *Game) EndHand() {
 	g.HandNumber++
-	// Score here?
+
 	g.Score()
 
 	if g.HandNumber == 4 {
@@ -230,7 +230,6 @@ func (g *Game) EndHand() {
 	}
 
 	g.NewHand()
-
 }
 
 func (g *Game) NewHand() {
