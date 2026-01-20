@@ -150,11 +150,11 @@ func NewGame(id string, playerNames []string, options ...GameOption) Game {
 
 	if config.RandomTeamOrder {
 		// Randomize playing order, preserving partner position
-		a := []string{playerNames[0], playerNames[1]}
+		a := []string{playerNames[0], playerNames[2]}
+		b := []string{playerNames[1], playerNames[3]}
 		rand.Shuffle(len(a), func(i, j int) {
 			a[i], a[j] = a[j], a[i]
 		})
-		b := []string{playerNames[1], playerNames[2]}
 		rand.Shuffle(len(a), func(i, j int) {
 			b[i], b[j] = b[j], b[i]
 		})
