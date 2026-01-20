@@ -159,15 +159,14 @@ func (gm *GameManager) SetReady(roomCode, token string, ready bool) (*ActiveGame
 	gm.mu.RUnlock()
 
 	if !exists {
-		return nil, false, errors.New("Game not found")
+		return nil, false, errors.New("ROOM_NOT_FOUND: Game not found")
 	}
 
-	// 2. Check game status
 	if game.Status != StatusLobby {
-		return nil, false, errors.New("Game has already started")
+		return nil, false, errors.New("GAME_ALREADY_STARTED: Cannot change ready state after game starts")
 	}
 
-	// 3. Find player by token
+	// 2. Find player by token
 	slotID := -1
 	for i, slot := range game.Players {
 		if slot.Token == token {
@@ -177,7 +176,7 @@ func (gm *GameManager) SetReady(roomCode, token string, ready bool) (*ActiveGame
 	}
 
 	if slotID == -1 {
-		return nil, false, errors.New("Invalid token")
+		return nil, false, errors.New("NOT_IN_GAME: Invalid token")
 	}
 
 	// 4. Update ready state
@@ -197,15 +196,15 @@ func (gm *GameManager) StartGame(roomCode string) error {
 	game, exists := gm.games[roomCode]
 
 	if !exists {
-		return errors.New("Game not found")
+		return errors.New("ROOM_NOT_FOUND: Game not found")
 	}
 
 	if game.Status != StatusLobby {
-		return errors.New("Game has already started")
+		return errors.New("INVALID_STATUS: Game already started")
 	}
 
 	if !gm.checkAllReady(game) {
-		return errors.New("At least one player is not ready")
+		return errors.New("NOT_ALL_READY: Cannot start game, not all players ready")
 	}
 
 	playerNames := game.Config.PlayerOrder
@@ -232,15 +231,15 @@ func (gm *GameManager) UpdateTeamOrder(roomCode, creatorToken string, newOrder [
 	gm.mu.RUnlock()
 
 	if !exists {
-		return nil, errors.New("Game not found")
+		return nil, errors.New("ROOM_NOT_FOUND: Game not found")
 	}
 
 	if game.Status != StatusLobby {
-		return nil, errors.New("Cannot change team order")
+		return nil, errors.New("GAME_ALREADY_STARTED: Cannot change team order after game starts")
 	}
 
 	if game.Players[0].Token != creatorToken {
-		return nil, errors.New("Only room creator can update team order")
+		return nil, errors.New("NOT_CREATOR: Only room creator can update team order")
 	}
 
 	if err := gm.validateTeamOrder(game, newOrder); err != nil {
@@ -259,11 +258,11 @@ func (gm *GameManager) LeaveGame(roomCode, token string) (*ActiveGame, error) {
 	gm.mu.RUnlock()
 
 	if !exists {
-		return nil, errors.New("Game not found")
+		return nil, errors.New("ROOM_NOT_FOUND: Game not found")
 	}
 
 	if game.Status != StatusLobby {
-		return nil, errors.New("Use disconnect for active games")
+		return nil, errors.New("GAME_STARTED: Use disconnect for active games")
 	}
 
 	// Find player
@@ -276,7 +275,7 @@ func (gm *GameManager) LeaveGame(roomCode, token string) (*ActiveGame, error) {
 	}
 
 	if slotID == -1 {
-		return nil, errors.New("Invalid token")
+		return nil, errors.New("NOT_IN_GAME: Invalid token")
 	}
 
 	game.Players[slotID].Connected = false
@@ -296,7 +295,7 @@ func (gm *GameManager) GetGame(roomCode string) (*ActiveGame, error) {
 
 	game, exists := gm.games[roomCode]
 	if !exists {
-		return nil, errors.New("Game not found")
+		return nil, errors.New("ROOM_NOT_FOUND: Game not found")
 	}
 
 	return game, nil
@@ -314,7 +313,7 @@ func (gm *GameManager) GetGameByToken(token string) (*ActiveGame, int, error) {
 		}
 	}
 
-	return nil, -1, errors.New("Invalid session token")
+	return nil, -1, errors.New("TOKEN_NOT_FOUND: Invalid session token")
 }
 
 func (gm *GameManager) promoteNewCreator(game *ActiveGame) {
@@ -385,7 +384,7 @@ func (gm *GameManager) validateUsername(game *ActiveGame, username string, skipS
 			continue
 		}
 		if slot.Username == username {
-			return errors.New("Username already taken!")
+			return errors.New("USERNAME_TAKEN: Username already taken")
 		}
 	}
 
@@ -405,7 +404,7 @@ func (gm *GameManager) validateTeamOrder(game *ActiveGame, order [4]string) erro
 	// Check all names in order are valid
 	for _, name := range order {
 		if !playerNames[name] {
-			return errors.New("Invalid player name in team order.")
+			return errors.New("INVALID_PLAYER: Invalid player name in team order")
 		}
 	}
 
