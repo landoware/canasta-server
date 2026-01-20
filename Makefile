@@ -57,4 +57,13 @@ watch:
             fi; \
         fi
 
-.PHONY: all build run test clean watch
+# Generate TypeScript types from Go structs
+generate-types:
+	@echo "Generating TypeScript types..."
+	@tygo generate
+
+# Development workflow with type generation
+dev: generate-types
+	@go run cmd/api/main.go
+
+.PHONY: all build run test clean watch generate-types dev
