@@ -103,7 +103,7 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		var msg CLientMessage
+		var msg ClientMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			log.Printf("Invalid JSON from %s: %v", connectionID, err)
 			s.sendError(socket, ctx, "Invalid JSON")
