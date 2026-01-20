@@ -1,14 +1,14 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 
-	"fmt"
-	"time"
-
 	"github.com/coder/websocket"
+	"github.com/google/uuid"
 )
 
 func (s *Server) RegisterRoutes() http.Handler {
@@ -70,22 +70,98 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
-	socket, err := websocket.Accept(w, r, nil)
+	socket, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		OriginPatterns: []string{"*"}, // TODO: make environment-specific
+	})
 	if err != nil {
 		http.Error(w, "Failed to open websocket", http.StatusInternalServerError)
 		return
 	}
-	defer socket.Close(websocket.StatusGoingAway, "Server closing websocket")
+	defer socket.Close(websocket.StatusGoingAway, "Server closing")
 
 	ctx := r.Context()
-	socketCtx := socket.CloseRead(ctx)
+
+	connectionID := uuid.New().String()
+	log.Printf("New connection: %s", connectionID)
+	s.connectionManager.AddConnection(connectionID, socket)
+	defer func() {
+		s.connectionManager.RemoveConnection(connectionID)
+		log.Printf("Connection closed: %s", connectionID)
+	}()
 
 	for {
-		payload := fmt.Sprintf("server timestamp: %d", time.Now().UnixNano())
-		if err := socket.Write(socketCtx, websocket.MessageText, []byte(payload)); err != nil {
-			log.Printf("Failed to write to socket: %v", err)
-			break
+		// Read from client
+		msgType, data, err := socket.Read(ctx)
+
+		if err != nil {
+			log.Printf("Connection %s read error: %v", connectionID, err)
+			return
 		}
-		time.Sleep(2 * time.Second)
+
+		if msgType != websocket.MessageText {
+			log.Printf("Non-text input from %s", connectionID)
+			continue
+		}
+
+		var msg CLientMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			log.Printf("Invalid JSON from %s: %v", connectionID, err)
+			s.sendError(socket, ctx, "Invalid JSON")
+			continue
+		}
+
+		log.Printf("Message Type '%s' from %s", msg.Type, connectionID)
+
+		// Route the message
+		switch msg.Type {
+		case "ping":
+			s.handlePing(socket, ctx, connectionID, msg.Payload)
+		// Future:
+		// case "create_game":
+		// case "join_game":
+		// case "execute_move"
+
+		default:
+			log.Printf("Unknown message type '%s' from %s", msg.Type, connectionID)
+		}
+	}
+
+}
+
+func (s *Server) handlePing(socket *websocket.Conn, ctx context.Context, connectionID string, msg json.RawMessage) {
+	log.Printf("Ping from %s", connectionID)
+
+	// No payload to parse
+
+	// Pong
+	response := ServerMessage{
+		Type:    "pong",
+		Payload: struct{}{},
+	}
+
+	if err := s.sendMessage(socket, ctx, response); err != nil {
+		log.Printf("Failed to send pong to %s: %v", connectionID, err)
+	}
+}
+
+func (s *Server) sendMessage(socket *websocket.Conn, ctx context.Context, msg ServerMessage) any {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return fmt.Errorf("Marshal error: %w", err)
+	}
+
+	return socket.Write(ctx, websocket.MessageText, data)
+}
+
+func (s *Server) sendError(socket *websocket.Conn, ctx context.Context, msg string) {
+	response := ServerMessage{
+		Type: "error",
+		Payload: ErrorMessage{
+			Message: msg,
+		},
+	}
+
+	if err := s.sendMessage(socket, ctx, response); err != nil {
+		log.Printf("Failed to send error message: %v", err)
 	}
 }
