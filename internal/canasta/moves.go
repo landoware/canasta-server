@@ -284,11 +284,120 @@ func (g *Game) PickUpFoot(p *Player) error {
 }
 
 func (g *Game) MoveAskToGoOut(p *Player) error {
+	// Check if there's already a pending request
+	// Why: Only one go-out request can be active at a time
+	if g.GoOutRequestPending {
+		return errors.New("GO_OUT_PENDING: A go-out request is already pending")
+	}
+
+	// Validate team has all 4 required canasta types
+	// Why: Standard Canasta rules require all 4 types before going out
+	// Types: Wildcards (2500pts), Sevens (1500pts), Natural (500pts), Unnatural (300pts)
+
+	hasWildcards := false
+	hasSevens := false
+	hasNatural := false
+	hasUnnatural := false
+
+	for _, canasta := range p.Team.Canastas {
+		if canasta.Rank == Wild {
+			hasWildcards = true
+		} else if canasta.Rank == Seven {
+			hasSevens = true
+			// Natural sevens also counts as a natural canasta
+			// Why: It's both a sevens canasta AND natural
+			if canasta.Natural {
+				hasNatural = true
+			}
+		} else if canasta.Natural {
+			hasNatural = true
+		} else {
+			// Mixed canasta (has wilds, not natural)
+			hasUnnatural = true
+		}
+	}
+
+	// Check all requirements
+	if !hasWildcards {
+		return errors.New("MISSING_CANASTA: Team needs a Wildcards canasta (2500pts) to go out")
+	}
+	if !hasSevens {
+		return errors.New("MISSING_CANASTA: Team needs a Sevens canasta (1500pts) to go out")
+	}
+	if !hasNatural {
+		return errors.New("MISSING_CANASTA: Team needs a Natural canasta (500pts) to go out")
+	}
+	if !hasUnnatural {
+		return errors.New("MISSING_CANASTA: Team needs an Unnatural/Mixed canasta (300pts) to go out")
+	}
+
+	// All canastas present - set up partner permission request
+	// Find player's ID
+	playerID := -1
+	for i, player := range g.Players {
+		if player == p {
+			playerID = i
+			break
+		}
+	}
+
+	// Find partner's ID
+	partnerID := -1
+	for i, player := range g.Players {
+		if player == p.partner {
+			partnerID = i
+			break
+		}
+	}
+
+	// Set permission request state
+	g.GoOutRequestPending = true
+	g.GoOutRequester = playerID
+	g.GoOutPartner = partnerID
+
+	// Note: Server will broadcast this to the partner
+	// Partner must respond with respond_go_out
 
 	return nil
 }
 
-func (g *Game) RespondToGoOut(p *Player) error {
+func (g *Game) RespondToGoOut(p *Player, approved bool) error {
+	// Validate there's a pending request
+	// Why: Can't respond if no one asked
+	if !g.GoOutRequestPending {
+		return errors.New("NO_REQUEST: No go-out request is pending")
+	}
+
+	// Find player's ID
+	playerID := -1
+	for i, player := range g.Players {
+		if player == p {
+			playerID = i
+			break
+		}
+	}
+
+	// Validate this is the partner who needs to respond
+	// Why: Only the partner can approve/deny
+	if playerID != g.GoOutPartner {
+		return errors.New("NOT_PARTNER: Only the partner can respond to go-out request")
+	}
+
+	// Clear the request state
+	requesterID := g.GoOutRequester
+	g.GoOutRequestPending = false
+	g.GoOutRequester = -1
+	g.GoOutPartner = -1
+
+	// If approved, set CanGoOut on the team
+	// Why: Requester can now discard to end the hand
+	if approved {
+		p.Team.CanGoOut = true
+	}
+
+	// Note: Server will broadcast the response to both players
+	// Return requester ID for server to know who to notify
+	_ = requesterID // Will be used by server layer
 
 	return nil
 }

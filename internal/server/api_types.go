@@ -182,3 +182,14 @@ type GameEndedNotification struct {
 type ServerShutdownNotification struct {
 	Message string `json:"message"`
 }
+
+// tygo:generate
+type PermissionRequestNotification struct {
+	RequestingPlayer int    `json:"requestingPlayer"`
+	RequestingName   string `json:"requestingName"`
+}
+
+// tygo:generate
+type PermissionResponseNotification struct {
+	Approved bool `json:"approved"`
+}

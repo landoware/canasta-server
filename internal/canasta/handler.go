@@ -35,7 +35,13 @@ type MoveResponse struct {
 }
 
 func (g *Game) ExecuteMove(move Move) MoveResponse {
-	// Validate it's the player's turn
+	// Special moves that don't require it to be player's turn
+	// Why: Partner responses happen on partner's turn, not requester's
+	if move.Type == MoveRespondGoOut {
+		return g.handleRespondGoOut(move.PlayerId, move.Id)
+	}
+
+	// Validate it's the player's turn for all other moves
 	if g.CurrentPlayer != move.PlayerId {
 		return MoveResponse{
 			Success: false,
@@ -61,6 +67,10 @@ func (g *Game) ExecuteMove(move Move) MoveResponse {
 		return g.handleDiscard(move.PlayerId, move.Id)
 	case MovePickupFoot:
 		return g.handlePickupFoot(move.PlayerId)
+	case MoveAskToGoOut:
+		return g.handleAskToGoOut(move.PlayerId)
+	case MoveRespondGoOut:
+		return g.handleRespondGoOut(move.PlayerId, move.Id)
 	default:
 		return MoveResponse{
 			Success: false,
@@ -128,4 +138,33 @@ func (g *Game) handlePickupFoot(playerID int) MoveResponse {
 		return MoveResponse{Success: false, Message: err.Error()}
 	}
 	return MoveResponse{Success: true}
+}
+
+func (g *Game) handleAskToGoOut(playerID int) MoveResponse {
+	err := g.MoveAskToGoOut(g.Players[playerID])
+	if err != nil {
+		return MoveResponse{Success: false, Message: err.Error()}
+	}
+	// Success - permission request sent to partner
+	// Server will broadcast this to the partner
+	return MoveResponse{Success: true, Message: "Permission requested from partner"}
+}
+
+func (g *Game) handleRespondGoOut(playerID int, approved int) MoveResponse {
+	// Convert int to bool: 1 = approved, 0 = denied
+	// Why use int: Move struct uses Id field which is an int
+	approvedBool := approved == 1
+
+	err := g.RespondToGoOut(g.Players[playerID], approvedBool)
+	if err != nil {
+		return MoveResponse{Success: false, Message: err.Error()}
+	}
+
+	// Success - response recorded
+	// Server will broadcast this to the requester
+	if approvedBool {
+		return MoveResponse{Success: true, Message: "Permission granted"}
+	} else {
+		return MoveResponse{Success: true, Message: "Permission denied"}
+	}
 }

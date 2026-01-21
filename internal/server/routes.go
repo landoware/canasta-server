@@ -937,6 +937,38 @@ func (s *Server) handleExecuteMove(socket *websocket.Conn, ctx context.Context, 
 		log.Printf("Failed to persist game %s after move: %v", game.RoomCode, err)
 	}
 
+	// Step 9b: Handle special move broadcasting (partner permissions)
+	// Why: Some moves require notifying specific players beyond normal game state
+	if req.Type == "ask_to_go_out" && game.Game.GoOutRequestPending {
+		// Broadcast permission request to partner only
+		partnerSlot := game.Players[game.Game.GoOutPartner]
+		if partnerSlot.Token != "" {
+			connID := s.connectionManager.GetConnectionByToken(partnerSlot.Token)
+			if connID != "" {
+				conn := s.connectionManager.GetConnection(connID)
+				if conn != nil {
+					s.sendMessage(conn, context.Background(), ServerMessage{
+						Type: "permission_requested",
+						Payload: PermissionRequestNotification{
+							RequestingPlayer: game.Game.GoOutRequester,
+							RequestingName:   game.Players[game.Game.GoOutRequester].Username,
+						},
+					})
+					log.Printf("Permission request sent from player %d to partner %d in game %s",
+						game.Game.GoOutRequester, game.Game.GoOutPartner, game.RoomCode)
+				}
+			}
+		}
+	} else if req.Type == "respond_go_out" {
+		// Broadcast response to requester and partner
+		approved := req.Id == 1
+		s.broadcastToLobby(game, "permission_response", PermissionResponseNotification{
+			Approved: approved,
+		})
+		log.Printf("Permission %s by player %d in game %s",
+			map[bool]string{true: "approved", false: "denied"}[approved], playerID, game.RoomCode)
+	}
+
 	// Step 10: Detect hand/game end
 	// Why check: Hand end triggers scoring, game end triggers completion
 	handEnded := game.Game.HandNumber != previousHandNumber
