@@ -397,17 +397,22 @@ func (s *Server) handleReconnect(socket *websocket.Conn, ctx context.Context, co
 		})
 	}
 
-	// Send current game state to reconnected player
+	// Send current state to reconnected player
+	// Why: Player needs to see current game state after reconnecting
 	if game.Status == StatusPlaying || game.Status == StatusPaused {
-		// TODO: Phase 4 will implement broadcastGameState
-		// For now, send lobby state if still in lobby
-		if game.Status == StatusLobby {
-			lobbyState := s.buildLobbyState(game, req.Token)
-			s.sendMessage(socket, ctx, ServerMessage{
-				Type:    "lobby_update",
-				Payload: lobbyState,
-			})
-		}
+		// Send game state for active games
+		state := s.buildGameStateMessage(game, session.PlayerID)
+		s.sendMessage(socket, ctx, ServerMessage{
+			Type:    "game_state",
+			Payload: state,
+		})
+	} else if game.Status == StatusLobby {
+		// Send lobby state if still in lobby
+		lobbyState := s.buildLobbyState(game, req.Token)
+		s.sendMessage(socket, ctx, ServerMessage{
+			Type:    "lobby_update",
+			Payload: lobbyState,
+		})
 	}
 }
 
@@ -454,10 +459,15 @@ func (s *Server) handleSetReady(socket *websocket.Conn, ctx context.Context, con
 			return
 		}
 
-		// Broadcast game started
+		// Broadcast game started notification
 		s.broadcastToLobby(game, "game_started", GameStartedNotification{
 			Message: "Game is starting! Get ready to play.",
 		})
+
+		// Broadcast initial game state to all players
+		// Why: Players need to see their starting hands and game state
+		// Why after notification: Notification tells UI game is starting, state shows the cards
+		s.broadcastGameState(game)
 	}
 }
 
@@ -599,5 +609,76 @@ func (s *Server) buildLobbyState(game *ActiveGame, forToken string) LobbyState {
 		RandomTeamOrder: game.Config.RandomTeamOrder,
 		Status:          string(game.Status),
 		AllReady:        allReady,
+	}
+}
+
+// broadcastGameState sends personalized game state to all connected players
+// Why: Each player needs to see their own hand, but only hand counts for others
+// Why personalized: ClientState.GetClientState(playerID) returns player-specific view
+// Why skip disconnected: No point sending to players who aren't connected
+func (s *Server) broadcastGameState(game *ActiveGame) {
+	// Don't broadcast if game not started yet
+	if game.Game == nil {
+		log.Printf("Warning: Attempted to broadcast game state before game started")
+		return
+	}
+
+	for i, slot := range game.Players {
+		// Skip empty slots
+		if slot.Token == "" {
+			continue
+		}
+
+		// Skip disconnected players
+		if !slot.Connected {
+			continue
+		}
+
+		// Build personalized state for this player
+		state := s.buildGameStateMessage(game, i)
+
+		// Find connection
+		connID := s.connectionManager.GetConnectionByToken(slot.Token)
+		if connID == "" {
+			continue
+		}
+
+		conn := s.connectionManager.GetConnection(connID)
+		if conn == nil {
+			continue
+		}
+
+		// Send with background context (non-blocking)
+		msg := ServerMessage{
+			Type:    "game_state",
+			Payload: state,
+		}
+
+		if err := s.sendMessage(conn, context.Background(), msg); err != nil {
+			log.Printf("Failed to broadcast game state to %s: %v", slot.Username, err)
+		}
+	}
+}
+
+// buildGameStateMessage creates personalized game state for a specific player
+// Why separate from broadcast: Makes testing easier, cleaner separation of concerns
+// Why playerID parameter: Each player gets different ClientState (shows their hand)
+func (s *Server) buildGameStateMessage(game *ActiveGame, playerID int) GameStateMessage {
+	// Safety check: game must be started
+	if game.Game == nil {
+		return GameStateMessage{
+			Status: string(game.Status),
+		}
+	}
+
+	// Get personalized client state from canasta package
+	// Why GetClientState: Handles card visibility, team info, etc.
+	clientState := game.Game.GetClientState(playerID)
+
+	return GameStateMessage{
+		State:         clientState,
+		CurrentPlayer: game.Game.CurrentPlayer,
+		Phase:         string(game.Game.Phase),
+		Status:        string(game.Status),
 	}
 }

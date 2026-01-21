@@ -132,3 +132,14 @@ type LobbyPlayer struct {
 type GameStartedNotification struct {
 	Message string `json:"message"`
 }
+
+// ============================================================================
+// GAME STATE (game_state broadcast) - Phase 4
+// ============================================================================
+// tygo:generate
+type GameStateMessage struct {
+	State         interface{} `json:"state"` // *canasta.ClientState - using interface{} to avoid circular import
+	CurrentPlayer int         `json:"currentPlayer"`
+	Phase         string      `json:"phase"`
+	Status        string      `json:"status"`
+}
