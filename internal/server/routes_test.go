@@ -181,6 +181,7 @@ func TestWebSocketMultipleConnections(t *testing.T) {
 func setupTestServer() (*Server, string, func()) {
 	s := &Server{
 		connectionManager: *NewConnectionManager(),
+		gameManager:       NewGameManager(),
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(s.websocketHandler))

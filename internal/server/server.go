@@ -15,6 +15,7 @@ import (
 type Server struct {
 	port              int
 	connectionManager ConnectionManager
+	gameManager       *GameManager
 	db                database.Service
 }
 
@@ -23,6 +24,7 @@ func NewServer() *http.Server {
 	NewServer := &Server{
 		port:              port,
 		connectionManager: *NewConnectionManager(),
+		gameManager:       NewGameManager(),
 		db:                database.New(),
 	}
 

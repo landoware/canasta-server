@@ -1,11 +1,17 @@
 package server
 
+// ============================================================================
+// ERROR RESPONSES
+// ============================================================================
 // tygo:generate
 type ErrorMessage struct {
 	Message string `json:"message"`
 	Code    string `json:"code,omitempty"`
 }
 
+// ============================================================================
+// CREATE GAME (create_game)
+// ============================================================================
 // tygo:generate
 type CreateGameRequest struct {
 	Username        string `json:"username"`
@@ -19,6 +25,9 @@ type CreateGameResponse struct {
 	PlayerID int    `json:"playerId"`
 }
 
+// ============================================================================
+// JOIN GAME (join_game)
+// ============================================================================
 // tygo:generate
 type JoinGameRequest struct {
 	RoomCode string `json:"roomCode"`
@@ -33,16 +42,33 @@ type JoinGameResponse struct {
 	Message  string `json:"message,omitempty"`
 }
 
+// ============================================================================
+// SET READY (set_ready)
+// ============================================================================
 // tygo:generate
 type SetReadyRequest struct {
 	Ready bool `json:"ready"`
 }
 
+// ============================================================================
+// UPDATE TEAM ORDER (update_team_order)
+// ============================================================================
 // tygo:generate
 type UpdateTeamOrderRequest struct {
 	PlayerOrder [4]string `json:"playerOrder"`
 }
 
+// ============================================================================
+// LEAVE GAME (leave_game)
+// ============================================================================
+// tygo:generate
+type LeaveGameRequest struct {
+	// No fields - token identifies player
+}
+
+// ============================================================================
+// LOBBY STATE (lobby_update broadcast)
+// ============================================================================
 // tygo:generate
 type LobbyState struct {
 	RoomCode        string         `json:"roomCode"`
@@ -58,5 +84,13 @@ type LobbyPlayer struct {
 	Username  string `json:"username"`
 	Ready     bool   `json:"ready"`
 	Connected bool   `json:"connected"`
-	IsYou     bool   `json:"isYou"`
+	IsYou     bool   `json:"isYou"` // Personalized for each client
+}
+
+// ============================================================================
+// GAME STARTED (game_started broadcast)
+// ============================================================================
+// tygo:generate
+type GameStartedNotification struct {
+	Message string `json:"message"`
 }
