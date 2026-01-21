@@ -155,7 +155,7 @@ func NewGame(id string, playerNames []string, options ...GameOption) Game {
 		rand.Shuffle(len(a), func(i, j int) {
 			a[i], a[j] = a[j], a[i]
 		})
-		rand.Shuffle(len(a), func(i, j int) {
+		rand.Shuffle(len(b), func(i, j int) {
 			b[i], b[j] = b[j], b[i]
 		})
 
