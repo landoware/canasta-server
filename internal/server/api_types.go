@@ -149,9 +149,10 @@ type GameStateMessage struct {
 // ============================================================================
 // tygo:generate
 type MoveRequest struct {
-	Type string `json:"type"`          // Move type from canasta package (e.g., "draw_from_deck")
-	Ids  []int  `json:"ids,omitempty"` // Card IDs for moves that require multiple cards
-	Id   int    `json:"id,omitempty"`  // Single card ID for moves that require one card
+	Type     string `json:"type"`               // Move type from canasta package (e.g., "draw_from_deck")
+	Ids      []int  `json:"ids,omitempty"`      // Card IDs for moves that require multiple cards
+	Id       int    `json:"id,omitempty"`       // Single card ID for moves that require one card
+	FromFoot bool   `json:"fromFoot,omitempty"` // For play_red_three: true if from foot (no draw), false if from hand (draw replacement)
 }
 
 // tygo:generate

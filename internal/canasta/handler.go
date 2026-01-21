@@ -20,6 +20,7 @@ const (
 	MoveAskToGoOut   MoveType = "ask_to_go_out"
 	MoveRespondGoOut MoveType = "respond_go_out"
 	MovePickupFoot   MoveType = "pickup_foot"
+	MovePlayRedThree MoveType = "play_red_three"
 )
 
 type Move struct {
@@ -27,6 +28,7 @@ type Move struct {
 	Type     MoveType
 	Id       int
 	Ids      []int
+	FromFoot bool // True if red threes came from foot (no replacement draw)
 }
 
 type MoveResponse struct {
@@ -71,6 +73,8 @@ func (g *Game) ExecuteMove(move Move) MoveResponse {
 		return g.handleAskToGoOut(move.PlayerId)
 	case MoveRespondGoOut:
 		return g.handleRespondGoOut(move.PlayerId, move.Id)
+	case MovePlayRedThree:
+		return g.handlePlayRedThree(move.PlayerId, move.Ids, move.FromFoot)
 	default:
 		return MoveResponse{
 			Success: false,
@@ -167,4 +171,12 @@ func (g *Game) handleRespondGoOut(playerID int, approved int) MoveResponse {
 	} else {
 		return MoveResponse{Success: true, Message: "Permission denied"}
 	}
+}
+
+func (g *Game) handlePlayRedThree(playerID int, cardIds []int, fromFoot bool) MoveResponse {
+	err := g.PlayRedThree(g.Players[playerID], cardIds, fromFoot)
+	if err != nil {
+		return MoveResponse{Success: false, Message: err.Error()}
+	}
+	return MoveResponse{Success: true}
 }

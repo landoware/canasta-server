@@ -283,6 +283,55 @@ func (g *Game) PickUpFoot(p *Player) error {
 	return nil
 }
 
+// PlayRedThree handles playing red threes from hand or foot
+// Why separate from DrawFromDeck: Manual play at start of turn
+// Behavior depends on source:
+//   - From initial hand: Draw 1 replacement card per red three
+//   - From foot: NO replacement draw (just add to pile)
+func (g *Game) PlayRedThree(p *Player, cardIds []int, fromFoot bool) error {
+	// Must be in drawing phase (start of turn, before normal draw)
+	// Why: Red threes played first, then normal draw happens
+	if g.Phase != PhaseDrawing {
+		return errors.New("WRONG_PHASE: Red threes must be played at start of turn (drawing phase)")
+	}
+
+	if len(cardIds) == 0 {
+		return errors.New("NO_CARDS: Must specify at least one card")
+	}
+
+	// Validate all cards are red threes
+	for _, cardId := range cardIds {
+		card, exists := p.Hand[cardId]
+		if !exists {
+			return fmt.Errorf("CARD_NOT_FOUND: Card %d not in hand", cardId)
+		}
+		if card.Rank != Three || card.Suit.isBlack() {
+			return errors.New("INVALID_CARD: Can only play red threes with this move")
+		}
+	}
+
+	// Move red threes from hand to team pile
+	for _, cardId := range cardIds {
+		card := p.Hand[cardId]
+		p.Team.RedThrees = append(p.Team.RedThrees, card)
+		delete(p.Hand, cardId)
+	}
+
+	// Draw replacement cards ONLY if from initial hand, NOT from foot
+	// Why: Standard Canasta rules - foot red threes don't get replacements
+	if !fromFoot {
+		replacementCards := g.Hand.Deck.Draw(len(cardIds))
+		for _, card := range replacementCards {
+			p.Hand[card.GetId()] = card
+		}
+	}
+
+	// Stay in drawing phase - player still needs to draw/pickup
+	// Why: Playing red threes doesn't count as the turn's draw action
+
+	return nil
+}
+
 func (g *Game) MoveAskToGoOut(p *Player) error {
 	// Check if there's already a pending request
 	// Why: Only one go-out request can be active at a time

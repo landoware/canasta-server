@@ -911,6 +911,7 @@ func (s *Server) handleExecuteMove(socket *websocket.Conn, ctx context.Context, 
 		Type:     canasta.MoveType(req.Type),
 		Ids:      req.Ids,
 		Id:       req.Id,
+		FromFoot: req.FromFoot, // For play_red_three: determines if replacement cards are drawn
 	}
 
 	response := game.Game.ExecuteMove(move)
