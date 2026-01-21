@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/coder/websocket"
@@ -29,11 +30,15 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Set CORS headers
-		w.Header().Set("Access-Control-Allow-Origin", "*") // Replace "*" with specific origins if needed
+		// Environment-based CORS configuration
+		// Why environment-based: Development needs flexible CORS, production should be restrictive
+		// Why specific domain: Prevents unauthorized sites from using our API
+		origin := s.getAllowedOrigin()
+
+		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
 		w.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type, X-CSRF-Token")
-		w.Header().Set("Access-Control-Allow-Credentials", "false") // Set to "true" if credentials are required
+		w.Header().Set("Access-Control-Allow-Credentials", "false")
 
 		// Handle preflight OPTIONS requests
 		if r.Method == http.MethodOptions {
@@ -44,6 +49,21 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 		// Proceed with the next handler
 		next.ServeHTTP(w, r)
 	})
+}
+
+// getAllowedOrigin returns the CORS origin based on environment
+// Why: Centralize CORS logic for easy testing and modification
+func (s *Server) getAllowedOrigin() string {
+	env := os.Getenv("ENVIRONMENT")
+
+	// Production: Only allow specific domain
+	if env == "production" {
+		return "https://landoware.com/canasta"
+	}
+
+	// Development/Test: Allow all origins
+	// Why wildcard in dev: Easier local development with different ports
+	return "*"
 }
 
 func (s *Server) HelloWorldHandler(w http.ResponseWriter, r *http.Request) {
@@ -72,8 +92,15 @@ func (s *Server) healthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
+	// Environment-based WebSocket origin patterns
+	// Why match CORS: Consistent security policy
+	originPatterns := []string{"*"}
+	if os.Getenv("ENVIRONMENT") == "production" {
+		originPatterns = []string{"landoware.com"}
+	}
+
 	socket, err := websocket.Accept(w, r, &websocket.AcceptOptions{
-		OriginPatterns: []string{"*"}, // TODO: make environment-specific
+		OriginPatterns: originPatterns,
 	})
 	if err != nil {
 		http.Error(w, "Failed to open websocket", http.StatusInternalServerError)
@@ -86,11 +113,26 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 	connectionID := uuid.New().String()
 	log.Printf("New connection: %s", connectionID)
 	s.connectionManager.AddConnection(connectionID, socket)
+
+	// Start heartbeat goroutine
+	// Why: Detect dead connections by sending periodic pings
+	// Why 30 seconds: Balance between quick detection and not overwhelming with traffic
+	heartbeatDone := make(chan struct{})
+	go s.heartbeatLoop(ctx, socket, connectionID, heartbeatDone)
+
 	defer func() {
+		// Stop heartbeat
+		close(heartbeatDone)
 		token := s.connectionManager.GetTokenByConnection(connectionID)
 
 		// Remove connection
 		s.connectionManager.RemoveConnection(connectionID)
+
+		// Clean up rate limiter and health tracker
+		// Why: Prevent memory leaks from disconnected connections
+		s.rateLimiter.RemoveConnection(connectionID)
+		s.connectionHealth.RemoveConnection(connectionID)
+
 		log.Printf("Connection closed: %s", connectionID)
 
 		// If player had a token, mark as disconnected
@@ -152,6 +194,19 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
+		// Update activity tracking
+		// Why: Track last message time for connection health monitoring
+		s.connectionHealth.UpdateActivity(connectionID)
+
+		// Check rate limit
+		// Why: Prevent abuse - limit to 10 messages per second per connection
+		// Why here: After JSON parse but before processing (don't count invalid messages against limit)
+		if !s.rateLimiter.Allow(connectionID) {
+			log.Printf("Rate limit exceeded for connection %s", connectionID)
+			s.sendError(socket, ctx, "RATE_LIMIT_EXCEEDED: Too many messages, please slow down")
+			continue
+		}
+
 		log.Printf("Message Type '%s' from %s", msg.Type, connectionID)
 
 		// Route the message
@@ -182,6 +237,61 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 		default:
 			log.Printf("Unknown message type '%s' from %s", msg.Type, connectionID)
 			s.sendError(socket, ctx, fmt.Sprintf("Unknown message type: %s", msg.Type))
+		}
+	}
+}
+
+// heartbeatLoop sends periodic pings to detect dead connections
+// Why separate goroutine: Don't block message processing
+// Why use context: Gracefully stop when connection closes
+func (s *Server) heartbeatLoop(ctx context.Context, socket *websocket.Conn, connectionID string, done chan struct{}) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-done:
+			// Connection closing, stop heartbeat
+			return
+		case <-ctx.Done():
+			// Context cancelled, stop heartbeat
+			return
+		case <-ticker.C:
+			// Send ping using websocket protocol (not application message)
+			// Why websocket ping: More efficient than application-level ping
+			// The library will automatically handle pong responses
+			if err := socket.Ping(ctx); err != nil {
+				log.Printf("Heartbeat ping failed for %s: %v", connectionID, err)
+				return
+			}
+			log.Printf("Heartbeat ping sent to %s", connectionID)
+		}
+	}
+}
+
+// checkInactiveConnections runs periodically to close connections that haven't responded
+// Why: Detect zombie connections that don't respond to heartbeats
+func (s *Server) checkInactiveConnections() {
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		// Find connections inactive for > 5 minutes
+		inactive := s.connectionHealth.GetInactiveConnections(5 * time.Minute)
+
+		if len(inactive) > 0 {
+			log.Printf("Found %d inactive connections, closing them", len(inactive))
+		}
+
+		for _, connID := range inactive {
+			// Get the connection
+			conn := s.connectionManager.GetConnection(connID)
+			if conn != nil {
+				// Close with timeout status
+				// Why StatusGoingAway: Indicates server-initiated close due to inactivity
+				conn.Close(websocket.StatusGoingAway, "Connection inactive")
+				log.Printf("Closed inactive connection: %s", connID)
+			}
 		}
 	}
 }
@@ -783,10 +893,18 @@ func (s *Server) handleExecuteMove(socket *websocket.Conn, ctx context.Context, 
 		}
 	}
 
-	// Step 5: Capture state before move for hand end detection
+	// Step 5: Lock game state for move execution
+	// Why: Prevent concurrent moves from corrupting game state
+	// Why here: After all validation but before any state changes
+	// Critical section: From capturing state through move execution
+	game.mu.Lock()
+	defer game.mu.Unlock()
+
+	// Step 6: Capture state before move for hand end detection
+	// Why inside lock: Ensure we see consistent state
 	previousHandNumber := game.Game.HandNumber
 
-	// Step 6: Build and execute move
+	// Step 7: Build and execute move
 	// Why construct here: We need to add playerID from server context
 	move := canasta.Move{
 		PlayerId: playerID,
@@ -797,7 +915,7 @@ func (s *Server) handleExecuteMove(socket *websocket.Conn, ctx context.Context, 
 
 	response := game.Game.ExecuteMove(move)
 
-	// Step 7: Handle move failure
+	// Step 8: Handle move failure
 	if !response.Success {
 		s.sendMessage(socket, ctx, ServerMessage{
 			Type: "move_result",
@@ -809,17 +927,17 @@ func (s *Server) handleExecuteMove(socket *websocket.Conn, ctx context.Context, 
 		return
 	}
 
-	// Step 8: Move succeeded - update timestamp
+	// Step 9: Move succeeded - update timestamp
 	game.UpdatedAt = time.Now()
 
-	// Step 8a: Persist game state after move
+	// Step 9a: Persist game state after move
 	// Why here: After move succeeds but before broadcasting
 	// If persistence fails, we still broadcast (prioritize gameplay over persistence)
 	if err := s.persistenceManager.SaveGame(game); err != nil {
 		log.Printf("Failed to persist game %s after move: %v", game.RoomCode, err)
 	}
 
-	// Step 9: Detect hand/game end
+	// Step 10: Detect hand/game end
 	// Why check: Hand end triggers scoring, game end triggers completion
 	handEnded := game.Game.HandNumber != previousHandNumber
 
@@ -856,11 +974,12 @@ func (s *Server) handleExecuteMove(socket *websocket.Conn, ctx context.Context, 
 		}
 	}
 
-	// Step 10: Broadcast game state to all players
+	// Step 11: Broadcast game state to all players
 	// Why: All players need to see the updated state
+	// Note: Still holding lock during broadcast to ensure consistency
 	s.broadcastGameState(game)
 
-	// Step 11: Send success response to requesting player
+	// Step 12: Send success response to requesting player
 	// Why after broadcast: Ensures player gets confirmation after state is consistent
 	s.sendMessage(socket, ctx, ServerMessage{
 		Type: "move_result",
@@ -868,4 +987,6 @@ func (s *Server) handleExecuteMove(socket *websocket.Conn, ctx context.Context, 
 			Success: true,
 		},
 	})
+
+	// Mutex automatically released by defer after this function returns
 }

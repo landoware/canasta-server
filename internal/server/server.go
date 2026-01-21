@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
@@ -22,9 +23,14 @@ type Server struct {
 	gameManager        *GameManager
 	sessionManager     *SessionManager
 	persistenceManager *PersistenceManager
+	rateLimiter        *RateLimiter      // Rate limiting per connection
+	connectionHealth   *ConnectionHealth // Connection health tracking
 }
 
-func NewServer() *http.Server {
+// NewServer creates and initializes the server
+// Returns both the custom Server (for shutdown logic) and http.Server (for serving)
+// Why both: Need access to Server methods while http.Server handles HTTP lifecycle
+func NewServer() (*Server, *http.Server) {
 	port, _ := strconv.Atoi(os.Getenv("PORT"))
 
 	// Initialize database
@@ -55,14 +61,17 @@ func NewServer() *http.Server {
 		gameManager:        gameManager,
 		sessionManager:     sessionManager,
 		persistenceManager: persistenceManager,
+		rateLimiter:        NewRateLimiter(10, time.Second), // 10 messages per second
+		connectionHealth:   NewConnectionHealth(),
 	}
 
 	// Start background tasks
 	go NewServer.periodicSaveTask()
 	go NewServer.cleanupTask()
+	go NewServer.checkInactiveConnections() // Phase 7: Monitor connection health
 
 	// Declare Server config
-	server := &http.Server{
+	httpServer := &http.Server{
 		Addr:         fmt.Sprintf(":%d", NewServer.port),
 		Handler:      NewServer.RegisterRoutes(),
 		IdleTimeout:  time.Minute,
@@ -70,7 +79,7 @@ func NewServer() *http.Server {
 		WriteTimeout: 30 * time.Second,
 	}
 
-	return server
+	return NewServer, httpServer
 }
 
 // runMigrations applies database migrations using goose
@@ -181,6 +190,66 @@ func (s *Server) cleanupTask() {
 
 		if deleted > 0 {
 			log.Printf("Cleanup task: deleted %d old completed games", deleted)
+		}
+	}
+}
+
+// Shutdown performs graceful shutdown operations
+// Why separate method: Encapsulate all shutdown logic in Server
+// Why return error: Allow caller to handle failures appropriately
+func (s *Server) Shutdown(ctx context.Context) error {
+	log.Println("Beginning graceful shutdown...")
+
+	// Step 1: Notify all connected players
+	// Why first: Give players immediate feedback that server is shutting down
+	s.notifyAllPlayers("server_shutdown", ServerShutdownNotification{
+		Message: "Server is shutting down for maintenance. Your game will be saved.",
+	})
+	log.Println("Notified all connected players of shutdown")
+
+	// Step 2: Save all active games to database
+	// Why: Ensure no game state is lost during shutdown
+	s.gameManager.mu.RLock()
+	gameCount := len(s.gameManager.games)
+	savedCount := 0
+
+	for _, game := range s.gameManager.games {
+		if err := s.persistenceManager.SaveGame(game); err != nil {
+			log.Printf("Failed to save game %s during shutdown: %v", game.RoomCode, err)
+		} else {
+			savedCount++
+		}
+	}
+	s.gameManager.mu.RUnlock()
+
+	log.Printf("Saved %d/%d games to database", savedCount, gameCount)
+
+	// Step 3: Close database connection
+	// Why last: Ensure all saves complete before closing DB
+	if err := s.db.Close(); err != nil {
+		log.Printf("Error closing database: %v", err)
+		return err
+	}
+
+	log.Println("Database closed successfully")
+	log.Println("Graceful shutdown complete")
+	return nil
+}
+
+// notifyAllPlayers sends a message to all connected players
+// Why: Centralize broadcast logic, reusable for different scenarios
+func (s *Server) notifyAllPlayers(messageType string, payload interface{}) {
+	s.connectionManager.mu.RLock()
+	defer s.connectionManager.mu.RUnlock()
+
+	for connID, conn := range s.connectionManager.connections {
+		msg := ServerMessage{
+			Type:    messageType,
+			Payload: payload,
+		}
+		// Use background context for broadcasts (don't block)
+		if err := s.sendMessage(conn, context.Background(), msg); err != nil {
+			log.Printf("Failed to notify connection %s: %v", connID, err)
 		}
 	}
 }

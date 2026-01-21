@@ -177,3 +177,8 @@ type GameEndedNotification struct {
 	TeamBScore int    `json:"teamBScore"`
 	WinnerTeam string `json:"winnerTeam"` // "TeamA" or "TeamB"
 }
+
+// tygo:generate
+type ServerShutdownNotification struct {
+	Message string `json:"message"`
+}

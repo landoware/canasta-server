@@ -25,6 +25,9 @@ type ActiveGame struct {
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 	LobbyExpiry time.Time
+	mu          sync.Mutex // Protects concurrent move execution
+	// Why mutex here: Prevents race conditions when multiple players execute moves
+	// Why not in canasta.Game: Keep game logic layer free of concurrency concerns
 }
 
 type LobbyConfig struct {

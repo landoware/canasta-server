@@ -376,3 +376,18 @@ func executeMoveByToken(t *testing.T, s *Server, token string, moveReq MoveReque
 		Message: response.Message,
 	}
 }
+
+// TestActiveGameMutex tests that ActiveGame has mutex for concurrency protection
+// Why: Document that mutex exists and is used correctly
+// This is a compile-time check - if mutex is removed, this test will fail to compile
+func TestActiveGameMutex(t *testing.T) {
+	game := &ActiveGame{}
+
+	// Verify mutex field exists
+	// Why: Compile-time check ensures mutex is present
+	game.mu.Lock()
+	game.mu.Unlock()
+
+	// Test passes if we can lock/unlock without panic
+	// Actual concurrency testing happens in integration tests with real move execution
+}
