@@ -316,6 +316,86 @@ func (gm *GameManager) GetGameByToken(token string) (*ActiveGame, int, error) {
 	return nil, -1, errors.New("TOKEN_NOT_FOUND: Invalid session token")
 }
 
+func (gm *GameManager) ReconnectPlayer(token, roomCode string, playerID int) (*ActiveGame, error) {
+	gm.mu.RLock()
+	game, exists := gm.games[roomCode]
+	gm.mu.RUnlock()
+
+	if !exists {
+		return nil, errors.New("ROOM_NOT_FOUND: Game not found")
+	}
+
+	if playerID < 0 || playerID >= 4 {
+		return nil, errors.New("INVALID_PLAYER_ID: Player ID out of range")
+	}
+
+	slot := &game.Players[playerID]
+
+	if slot.Token != token {
+		return nil, errors.New("TOKEN_MISMATCH: Token does not match player slot")
+	}
+
+	if slot.Username == "" {
+		return nil, errors.New("INVALID_SLOT: Slot is empty")
+	}
+
+	slot.Connected = true
+	game.UpdatedAt = time.Now()
+
+	// Resume if we have everyone
+	// Why check: If all players reconnected and game was paused, resume
+	if game.Status == StatusPaused {
+		allConnected := true
+		for _, s := range game.Players {
+			// Only check slots with players (Username not empty)
+			if s.Username != "" && !s.Connected {
+				allConnected = false
+				break
+			}
+		}
+		if allConnected {
+			game.Status = StatusPlaying
+		}
+	}
+
+	return game, nil
+}
+
+func (gm *GameManager) PauseGame(roomCode string) (didPause bool, err error) {
+	gm.mu.RLock()
+	game, exists := gm.games[roomCode]
+	gm.mu.RUnlock()
+
+	if !exists {
+		return false, errors.New("ROOM_NOT_FOUND: Game not found")
+	}
+
+	if game.Status == StatusPlaying {
+		game.Status = StatusPaused
+		game.UpdatedAt = time.Now()
+		return true, nil
+	}
+	return false, nil
+}
+
+func (gm *GameManager) MarkPlayerDisconnected(token string) (bool, *ActiveGame, int, error) {
+	game, playerID, err := gm.GetGameByToken(token)
+	if err != nil {
+		return false, nil, -1, err
+	}
+
+	game.Players[playerID].Connected = false
+	game.UpdatedAt = time.Now()
+
+	gamePaused, err := gm.PauseGame(game.RoomCode)
+	if err != nil {
+		return false, nil, -1, err
+	}
+
+	return gamePaused, game, playerID, nil
+
+}
+
 func (gm *GameManager) promoteNewCreator(game *ActiveGame) {
 	// Find first connected player in slots 1-3
 	newCreatorSlot := -1

@@ -34,6 +34,48 @@ func (cm *ConnectionManager) AddConnection(id string, conn *websocket.Conn) {
 	cm.connections[id] = conn
 }
 
+// AddConnectionWithToken associates a token with a connection
+// Used during: initial connection and reconnection
+// Returns: old connectionID if token was already connected (device switch scenario)
+// Why return old connection: Allows caller to send "disconnected_elsewhere" message
+// Note: This method REPLACES the old connection mapping. Caller must handle old connection cleanup.
+func (cm *ConnectionManager) AddConnectionWithToken(connectionID string, conn *websocket.Conn, token string) string {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	// Check if token already connected (device switch scenario)
+	// Why check: Enforce single connection per token
+	var oldConnectionId string
+	for id, player := range cm.players {
+		if player.Token == token {
+			oldConnectionId = id
+			break
+		}
+	}
+
+	// If old connection exists and it's different from new connection, remove old mapping
+	// Why remove: Only one connection per token allowed
+	if oldConnectionId != "" && oldConnectionId != connectionID {
+		delete(cm.players, oldConnectionId)
+		// Note: We keep old connection in connections map so caller can send message to it
+		// Caller should call RemoveConnection(oldConnectionId) after sending message
+	}
+
+	// Store new connection
+	cm.connections[connectionID] = conn
+	cm.players[connectionID] = PlayerConnection{
+		Token: token,
+	}
+
+	// Return old connection ID if found (empty string if no previous connection)
+	// Caller should:
+	// 1. Get old connection via GetConnection(oldConnectionId)
+	// 2. Send "disconnected_elsewhere" message
+	// 3. Close old connection
+	// 4. Call RemoveConnection(oldConnectionID) to cleanup
+	return oldConnectionId
+}
+
 func (cm *ConnectionManager) RemoveConnection(id string) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
@@ -41,12 +83,44 @@ func (cm *ConnectionManager) RemoveConnection(id string) {
 	delete(cm.players, id)
 }
 
-// MapToken stores token → connectionID mapping
+// GetConnection returns websocket for connectionID
+func (cm *ConnectionManager) GetConnection(connectionID string) *websocket.Conn {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+
+	return cm.connections[connectionID]
+}
+
+func (cm *ConnectionManager) GetConnectionByToken(token string) string {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+
+	for connID, player := range cm.players {
+		if player.Token == token {
+			return connID
+		}
+	}
+	return ""
+}
+
+func (cm *ConnectionManager) GetTokenByConnection(connectionID string) string {
+	cm.mu.RLock()
+	defer cm.mu.RUnlock()
+
+	if player, exists := cm.players[connectionID]; exists {
+		return player.Token
+	}
+	return ""
+}
+
+// MapToken stores token → connectionID mapping (legacy method)
+// Kept for backward compatibility with existing code
+// Prefer using AddConnectionWithToken for new code
 func (cm *ConnectionManager) MapToken(token, connectionID string) {
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	// Store in players map (already exists)
+	// Store in players map
 	if player, exists := cm.players[connectionID]; exists {
 		player.Token = token
 		cm.players[connectionID] = player
@@ -69,36 +143,4 @@ func (cm *ConnectionManager) UnmapToken(token string) {
 			break
 		}
 	}
-}
-
-// GetTokenByConnection returns token for a connection
-func (cm *ConnectionManager) GetTokenByConnection(connectionID string) string {
-	cm.mu.RLock()
-	defer cm.mu.RUnlock()
-
-	if player, exists := cm.players[connectionID]; exists {
-		return player.Token
-	}
-	return ""
-}
-
-// GetConnectionByToken returns connectionID for a token
-func (cm *ConnectionManager) GetConnectionByToken(token string) string {
-	cm.mu.RLock()
-	defer cm.mu.RUnlock()
-
-	for connID, player := range cm.players {
-		if player.Token == token {
-			return connID
-		}
-	}
-	return ""
-}
-
-// GetConnection returns websocket for connectionID
-func (cm *ConnectionManager) GetConnection(connectionID string) *websocket.Conn {
-	cm.mu.RLock()
-	defer cm.mu.RUnlock()
-
-	return cm.connections[connectionID]
 }

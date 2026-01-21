@@ -85,8 +85,42 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("New connection: %s", connectionID)
 	s.connectionManager.AddConnection(connectionID, socket)
 	defer func() {
+		token := s.connectionManager.GetTokenByConnection(connectionID)
+
+		// Remove connection
 		s.connectionManager.RemoveConnection(connectionID)
 		log.Printf("Connection closed: %s", connectionID)
+
+		// If player had a token, mark as disconnected
+		if token != "" {
+			gamePaused, game, playerID, err := s.gameManager.MarkPlayerDisconnected(token)
+			if err != nil {
+				// This can happen if player left via leave_game before disconnect
+				// It's not an error, just log at debug level
+				if err.Error() != "TOKEN_NOT_FOUND: Invalid session token" {
+					log.Printf("Error marking player disconnected: %v", err)
+				}
+				return
+			}
+
+			log.Printf("Player %d (%s) disconnected from game %s",
+				playerID, game.Players[playerID].Username, game.RoomCode)
+
+			// Broadcast disconnect notification
+			s.broadcastToLobby(game, "player_disconnected", PlayerStatusNotification{
+				PlayerID:  playerID,
+				Username:  game.Players[playerID].Username,
+				Connected: false,
+			})
+
+			// If game was paused, broadcast that
+			if gamePaused {
+				s.broadcastToLobby(game, "game_paused", GamePausedNotification{
+					Message: fmt.Sprintf("%s disconnected. Game paused.",
+						game.Players[playerID].Username),
+				})
+			}
+		}
 	}()
 
 	for {
@@ -122,6 +156,9 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 
 		case "join_game":
 			s.handleJoinGame(socket, ctx, connectionID, msg.Payload)
+
+		case "reconnect":
+			s.handleReconnect(socket, ctx, connectionID, msg.Payload)
 
 		case "set_ready":
 			s.handleSetReady(socket, ctx, connectionID, msg.Payload)
@@ -204,27 +241,28 @@ func (s *Server) broadcastToLobby(game *ActiveGame, messageType string, payload 
 }
 
 func (s *Server) handleCreateGame(socket *websocket.Conn, ctx context.Context, connectionID string, payload json.RawMessage) {
-	// Why we need this handler:
-	// - Player wants to create a new game lobby
-	// - Generates room code, assigns as creator (slot 0)
-	// - Returns room code and session token
-
-	// Step 1: Parse request
+	// Parse request
 	var req CreateGameRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		s.sendError(socket, ctx, "Invalid create_game payload")
 		return
 	}
 
-	// Step 2: Call game manager
+	// Call game manager
 	game, token, err := s.gameManager.CreateGame(req.Username, req.RandomTeamOrder)
 	if err != nil {
 		s.sendError(socket, ctx, err.Error())
 		return
 	}
 
-	// Step 3: Store token mapping
-	s.connectionManager.MapToken(token, connectionID)
+	// Store session and token mapping
+	s.sessionManager.StoreSession(SessionInfo{
+		Token:    token,
+		RoomCode: game.RoomCode,
+		PlayerID: 0,
+		Username: req.Username,
+	})
+	s.connectionManager.AddConnectionWithToken(connectionID, socket, token)
 
 	// Step 4: Send response to creator
 	response := ServerMessage{
@@ -232,7 +270,7 @@ func (s *Server) handleCreateGame(socket *websocket.Conn, ctx context.Context, c
 		Payload: CreateGameResponse{
 			RoomCode: game.RoomCode,
 			Token:    token,
-			PlayerID: 0, // Creator is always slot 0
+			PlayerID: 0,
 		},
 	}
 	if err := s.sendMessage(socket, ctx, response); err != nil {
@@ -246,29 +284,30 @@ func (s *Server) handleCreateGame(socket *websocket.Conn, ctx context.Context, c
 }
 
 func (s *Server) handleJoinGame(socket *websocket.Conn, ctx context.Context, connectionID string, payload json.RawMessage) {
-	// Why we need this handler:
-	// - Player wants to join existing lobby via room code
-	// - Validates room exists, not full, username unique
-	// - Returns session token and slot ID
-
-	// Step 1: Parse request
+	// Parse request
 	var req JoinGameRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		s.sendError(socket, ctx, "Invalid join_game payload")
 		return
 	}
 
-	// Step 2: Call game manager
+	// Call game manager
 	game, token, slotID, err := s.gameManager.JoinGame(req.RoomCode, req.Username)
 	if err != nil {
 		s.sendError(socket, ctx, err.Error())
 		return
 	}
 
-	// Step 3: Store token mapping
-	s.connectionManager.MapToken(token, connectionID)
+	// Store token mapping
+	s.sessionManager.StoreSession(SessionInfo{
+		Token:    token,
+		RoomCode: game.RoomCode,
+		PlayerID: slotID,
+		Username: req.Username,
+	})
+	s.connectionManager.AddConnectionWithToken(connectionID, socket, token)
 
-	// Step 4: Send response to joiner
+	// Send response to joiner
 	response := ServerMessage{
 		Type: "game_joined",
 		Payload: JoinGameResponse{
@@ -282,9 +321,94 @@ func (s *Server) handleJoinGame(socket *websocket.Conn, ctx context.Context, con
 		return
 	}
 
-	// Step 5: Broadcast lobby state to ALL players
-	// Why: Everyone needs to see new player joined
+	// Broadcast lobby state to ALL players
 	s.broadcastLobbyUpdate(game)
+}
+
+func (s *Server) handleReconnect(socket *websocket.Conn, ctx context.Context, connectionID string, payload json.RawMessage) {
+	// Parse payload
+	var req ReconnectRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		s.sendError(socket, ctx, "Invalid reconnect payload")
+		return
+	}
+
+	// Validate session
+	session, err := s.sessionManager.GetSession(req.Token)
+	if err != nil {
+		s.sendError(socket, ctx, err.Error())
+		return
+	}
+
+	// Has this token already connected?
+	oldConnectionID := s.connectionManager.AddConnectionWithToken(connectionID, socket, req.Token)
+
+	if oldConnectionID != "" && oldConnectionID != connectionID {
+		// Disconnect the old token
+		oldConn := s.connectionManager.GetConnection(oldConnectionID)
+		if oldConn != nil {
+			s.sendMessage(oldConn, context.Background(), ServerMessage{
+				Type: "disconnected_elsewhere",
+				Payload: struct {
+					Message string `json:"message"`
+				}{
+					Message: "You connected on another device",
+				},
+			})
+			oldConn.Close(websocket.StatusNormalClosure, "Connected from another device")
+		}
+		s.connectionManager.RemoveConnection(oldConnectionID)
+	}
+
+	// Reconnect in gameManager
+	game, err := s.gameManager.ReconnectPlayer(req.Token, session.RoomCode, session.PlayerID)
+	if err != nil {
+		s.sendError(socket, ctx, err.Error())
+		return
+	}
+
+	// Respond to the player
+	response := ServerMessage{
+		Type: "reconnected",
+		Payload: ReconnectResponse{
+			Success:  true,
+			RoomCode: session.RoomCode,
+			PlayerID: session.PlayerID,
+			Message:  "Successfully reconnected",
+		},
+	}
+	if err := s.sendMessage(socket, ctx, response); err != nil {
+		log.Printf("Failed to send reconnected response: %v", err)
+	}
+
+	// Broadcast to others
+	s.broadcastToLobby(game, "player_reconnected", PlayerStatusNotification{
+		PlayerID:  session.PlayerID,
+		Username:  session.Username,
+		Connected: true,
+	})
+
+	// If game resumed, broadcast that too
+	if game.Status == StatusPlaying {
+		s.broadcastToLobby(game, "game_resumed", struct {
+			Message string `json:"message"`
+		}{
+			Message: "Game resumed!",
+		})
+	}
+
+	// Send current game state to reconnected player
+	if game.Status == StatusPlaying || game.Status == StatusPaused {
+		// TODO: Phase 4 will implement broadcastGameState
+		// For now, send lobby state if still in lobby
+		if game.Status == StatusLobby {
+			lobbyState := s.buildLobbyState(game, req.Token)
+			s.sendMessage(socket, ctx, ServerMessage{
+				Type:    "lobby_update",
+				Payload: lobbyState,
+			})
+		}
+	}
 }
 
 func (s *Server) handleSetReady(socket *websocket.Conn, ctx context.Context, connectionID string, payload json.RawMessage) {
@@ -376,36 +500,28 @@ func (s *Server) handleUpdateTeamOrder(socket *websocket.Conn, ctx context.Conte
 }
 
 func (s *Server) handleLeaveGame(socket *websocket.Conn, ctx context.Context, connectionID string, payload json.RawMessage) {
-	// Why we need this handler:
-	// - Player voluntarily leaves lobby
-	// - Marks disconnected, may promote new creator
-
-	// Step 1: Get player's token
+	// Get player's token
 	token := s.connectionManager.GetTokenByConnection(connectionID)
 	if token == "" {
 		s.sendError(socket, ctx, "NOT_IN_GAME: No active game session")
 		return
 	}
 
-	// Step 2: Get game by token
+	// Get game by token
 	game, _, err := s.gameManager.GetGameByToken(token)
 	if err != nil {
 		s.sendError(socket, ctx, err.Error())
 		return
 	}
 
-	// Step 3: Leave game
+	// Leave game
 	game, err = s.gameManager.LeaveGame(game.RoomCode, token)
 	if err != nil {
 		s.sendError(socket, ctx, err.Error())
 		return
 	}
 
-	// Step 4: Remove token mapping
-	s.connectionManager.UnmapToken(token)
-
-	// Step 5: Broadcast lobby update
-	// Why: Others see player left
+	// Broadcast lobby update
 	s.broadcastLobbyUpdate(game)
 }
 

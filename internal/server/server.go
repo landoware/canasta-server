@@ -14,18 +14,20 @@ import (
 
 type Server struct {
 	port              int
-	connectionManager ConnectionManager
-	gameManager       *GameManager
 	db                database.Service
+	connectionManager *ConnectionManager
+	gameManager       *GameManager
+	sessionManager    *SessionManager
 }
 
 func NewServer() *http.Server {
 	port, _ := strconv.Atoi(os.Getenv("PORT"))
 	NewServer := &Server{
 		port:              port,
-		connectionManager: *NewConnectionManager(),
-		gameManager:       NewGameManager(),
 		db:                database.New(),
+		connectionManager: NewConnectionManager(),
+		gameManager:       NewGameManager(),
+		sessionManager:    NewSessionManager(), // ADD THIS
 	}
 
 	// Declare Server config

@@ -43,6 +43,44 @@ type JoinGameResponse struct {
 }
 
 // ============================================================================
+// RECONNECT (reconnect) - Phase 3
+// ============================================================================
+// tygo:generate
+type ReconnectRequest struct {
+	Token string `json:"token"`
+}
+
+// tygo:generate
+type ReconnectResponse struct {
+	Success  bool   `json:"success"`
+	Message  string `json:"message,omitempty"`
+	RoomCode string `json:"roomCode,omitempty"`
+	PlayerID int    `json:"playerId,omitempty"`
+}
+
+// tygo:generate
+type PlayerStatusNotification struct {
+	PlayerID  int    `json:"playerId"`
+	Username  string `json:"username"`
+	Connected bool   `json:"connected"`
+}
+
+// tygo:generate
+type GameResumedNotification struct {
+	Message string `json:"message"`
+}
+
+// tygo:generate
+type GamePausedNotification struct {
+	Message string `json:"message"`
+}
+
+// tygo:generate
+type DisconnectedElsewhereNotification struct {
+	Message string `json:"message"`
+}
+
+// ============================================================================
 // SET READY (set_ready)
 // ============================================================================
 // tygo:generate

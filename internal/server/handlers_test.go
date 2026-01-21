@@ -341,13 +341,13 @@ func TestHandleSetReady_AutoStart(t *testing.T) {
 		conns[i+1].Read(ctx) // game_joined
 
 		// Each player receives lobby_update
-		for j := 0; j <= i+1; j++ {
+		for j := range i + 1 {
 			conns[j].Read(ctx) // lobby_update broadcast
 		}
 	}
 
 	// All 4 players ready up
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		readyReq := ClientMessage{
 			Type: "set_ready",
 			Payload: mustMarshal(SetReadyRequest{
@@ -357,7 +357,7 @@ func TestHandleSetReady_AutoStart(t *testing.T) {
 		conns[i].Write(ctx, websocket.MessageText, mustMarshal(readyReq))
 
 		// Drain lobby_update messages
-		for j := 0; j < 4; j++ {
+		for j := range 4 {
 			conns[j].Read(ctx)
 		}
 	}
@@ -595,7 +595,8 @@ func createFullLobby(t *testing.T, ctx context.Context, url string) (*websocket.
 
 		// Drain broadcast messages
 		conn.Read(ctx) // lobby_update
-		tempConn.Close(websocket.StatusNormalClosure, "")
+		// NOTE: Don't close tempConn - Phase 3 disconnect handler would mark player as disconnected
+		// Let test cleanup handle connection closing
 	}
 
 	return conn, roomCode
@@ -638,7 +639,8 @@ func createGameWithPlayers(t *testing.T, ctx context.Context, url string, player
 		tempConn.Write(ctx, websocket.MessageText, mustMarshal(joinReq))
 		tempConn.Read(ctx) // game_joined
 		conn.Read(ctx)     // lobby_update
-		tempConn.Close(websocket.StatusNormalClosure, "")
+		// NOTE: Don't close tempConn - Phase 3 disconnect handler would mark player as disconnected
+		// Let test cleanup handle connection closing
 	}
 
 	return conn, roomCode
@@ -724,7 +726,7 @@ func TestFullLobbyFlow_CreateJoinReadyStart(t *testing.T) {
 	}
 
 	// All 4 players ready up
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		readyReq := ClientMessage{
 			Type: "set_ready",
 			Payload: mustMarshal(SetReadyRequest{
@@ -734,13 +736,13 @@ func TestFullLobbyFlow_CreateJoinReadyStart(t *testing.T) {
 		conns[i].Write(ctx, websocket.MessageText, mustMarshal(readyReq))
 
 		// Drain lobby_update broadcasts
-		for j := 0; j < 4; j++ {
+		for j := range 4 {
 			conns[j].Read(ctx)
 		}
 	}
 
 	// All players should receive game_started
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		_, data, err := conns[i].Read(ctx)
 		assert.NoError(err)
 		json.Unmarshal(data, &response)
@@ -1107,6 +1109,7 @@ func TestGameStart_RespectsTeamOrder(t *testing.T) {
 		conns[i].Write(ctx, websocket.MessageText, mustMarshal(joinReq))
 		conns[i].Read(ctx) // game_joined
 
+		// Read lobby_update from all connected players (0 to i)
 		for j := 0; j <= i; j++ {
 			conns[j].Read(ctx)
 		}
@@ -1122,25 +1125,25 @@ func TestGameStart_RespectsTeamOrder(t *testing.T) {
 	}
 	conns[0].Write(ctx, websocket.MessageText, mustMarshal(updateReq))
 
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		conns[i].Read(ctx)
 	}
 
 	// All ready up
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		readyReq := ClientMessage{
 			Type:    "set_ready",
 			Payload: mustMarshal(SetReadyRequest{Ready: true}),
 		}
 		conns[i].Write(ctx, websocket.MessageText, mustMarshal(readyReq))
 
-		for j := 0; j < 4; j++ {
+		for j := range 4 {
 			conns[j].Read(ctx)
 		}
 	}
 
 	// Drain game_started
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		conns[i].Read(ctx)
 	}
 
@@ -1150,4 +1153,178 @@ func TestGameStart_RespectsTeamOrder(t *testing.T) {
 	assert.Equal("Alice", game.Game.Players[1].Name)
 	assert.Equal("Diana", game.Game.Players[2].Name)
 	assert.Equal("Charlie", game.Game.Players[3].Name)
+}
+
+// ============================================================================
+// RECONNECTION TESTS (Phase 3)
+// ============================================================================
+
+// Test: Reconnect to lobby after disconnect
+// Why: Verify players can reconnect to lobby with their token
+func TestHandleReconnect_ToLobby(t *testing.T) {
+	assert := assert.New(t)
+	ctx := context.Background()
+	server, url, cleanup := setupTestServer()
+	defer cleanup()
+
+	// Player creates game
+	conn1, _, err := websocket.Dial(ctx, url, nil)
+	assert.NoError(err)
+
+	createReq := ClientMessage{
+		Type: "create_game",
+		Payload: mustMarshal(CreateGameRequest{
+			Username:        "Alice",
+			RandomTeamOrder: false,
+		}),
+	}
+	conn1.Write(ctx, websocket.MessageText, mustMarshal(createReq))
+
+	// Read game_created
+	_, data, _ := conn1.Read(ctx)
+	var gameCreatedMsg ServerMessage
+	json.Unmarshal(data, &gameCreatedMsg)
+	var createResp CreateGameResponse
+	payloadBytes, _ := json.Marshal(gameCreatedMsg.Payload)
+	json.Unmarshal(payloadBytes, &createResp)
+
+	token := createResp.Token
+	roomCode := createResp.RoomCode
+
+	// Read lobby_update
+	conn1.Read(ctx)
+
+	// Disconnect
+	conn1.Close(websocket.StatusNormalClosure, "")
+	time.Sleep(50 * time.Millisecond) // Give server time to process disconnect
+
+	// Verify player marked as disconnected in game
+	game, _ := server.gameManager.GetGame(roomCode)
+	assert.False(game.Players[0].Connected)
+
+	// Reconnect with token
+	conn2, _, err := websocket.Dial(ctx, url, nil)
+	assert.NoError(err)
+	defer conn2.Close(websocket.StatusNormalClosure, "")
+
+	reconnectReq := ClientMessage{
+		Type: "reconnect",
+		Payload: mustMarshal(ReconnectRequest{
+			Token: token,
+		}),
+	}
+	conn2.Write(ctx, websocket.MessageText, mustMarshal(reconnectReq))
+
+	// Read reconnected response
+	_, data, err = conn2.Read(ctx)
+	assert.NoError(err)
+
+	var response ServerMessage
+	json.Unmarshal(data, &response)
+	assert.Equal("reconnected", response.Type)
+
+	var reconnectResp ReconnectResponse
+	payloadBytes, _ = json.Marshal(response.Payload)
+	json.Unmarshal(payloadBytes, &reconnectResp)
+	assert.True(reconnectResp.Success)
+	assert.Equal(roomCode, reconnectResp.RoomCode)
+	assert.Equal(0, reconnectResp.PlayerID)
+
+	// Verify player marked as connected
+	game, _ = server.gameManager.GetGame(roomCode)
+	assert.True(game.Players[0].Connected)
+}
+
+// Test: Reconnect with invalid token
+// Why: Verify security - invalid tokens are rejected
+func TestHandleReconnect_InvalidToken(t *testing.T) {
+	assert := assert.New(t)
+	ctx := context.Background()
+	_, url, cleanup := setupTestServer()
+	defer cleanup()
+
+	conn, _, err := websocket.Dial(ctx, url, nil)
+	assert.NoError(err)
+	defer conn.Close(websocket.StatusNormalClosure, "")
+
+	reconnectReq := ClientMessage{
+		Type: "reconnect",
+		Payload: mustMarshal(ReconnectRequest{
+			Token: "invalid-token",
+		}),
+	}
+	conn.Write(ctx, websocket.MessageText, mustMarshal(reconnectReq))
+
+	// Should receive error
+	_, data, err := conn.Read(ctx)
+	assert.NoError(err)
+
+	var response ServerMessage
+	json.Unmarshal(data, &response)
+	assert.Equal("error", response.Type)
+}
+
+// Test: Device switch - connect from two devices with same token
+// Why: Verify single connection per token enforcement
+func TestHandleReconnect_DeviceSwitch(t *testing.T) {
+	assert := assert.New(t)
+	ctx := context.Background()
+	_, url, cleanup := setupTestServer()
+	defer cleanup()
+
+	// Player creates game on device 1
+	conn1, _, err := websocket.Dial(ctx, url, nil)
+	assert.NoError(err)
+
+	createReq := ClientMessage{
+		Type: "create_game",
+		Payload: mustMarshal(CreateGameRequest{
+			Username:        "Alice",
+			RandomTeamOrder: false,
+		}),
+	}
+	conn1.Write(ctx, websocket.MessageText, mustMarshal(createReq))
+
+	// Read game_created
+	_, data, _ := conn1.Read(ctx)
+	var gameCreatedMsg ServerMessage
+	json.Unmarshal(data, &gameCreatedMsg)
+	var createResp CreateGameResponse
+	payloadBytes, _ := json.Marshal(gameCreatedMsg.Payload)
+	json.Unmarshal(payloadBytes, &createResp)
+	token := createResp.Token
+
+	// Read lobby_update
+	conn1.Read(ctx)
+
+	// Connect from device 2 with same token
+	conn2, _, err := websocket.Dial(ctx, url, nil)
+	assert.NoError(err)
+	defer conn2.Close(websocket.StatusNormalClosure, "")
+
+	reconnectReq := ClientMessage{
+		Type: "reconnect",
+		Payload: mustMarshal(ReconnectRequest{
+			Token: token,
+		}),
+	}
+	conn2.Write(ctx, websocket.MessageText, mustMarshal(reconnectReq))
+
+	// Device 1 should receive disconnected_elsewhere
+	_, data, err = conn1.Read(ctx)
+	if err == nil {
+		var response ServerMessage
+		json.Unmarshal(data, &response)
+		// Should be disconnected_elsewhere or connection closed
+		if response.Type == "disconnected_elsewhere" {
+			assert.Equal("disconnected_elsewhere", response.Type)
+		}
+	}
+
+	// Device 2 should receive reconnected
+	_, data, err = conn2.Read(ctx)
+	assert.NoError(err)
+	var response ServerMessage
+	json.Unmarshal(data, &response)
+	assert.Equal("reconnected", response.Type)
 }

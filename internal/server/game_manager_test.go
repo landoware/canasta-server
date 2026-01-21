@@ -1567,3 +1567,367 @@ func TestGetGameByToken_ThreadSafe(t *testing.T) {
 		assert.NoError(err)
 	}
 }
+
+// Test: Reconnect player successfully
+// Why: Core reconnection functionality - player reconnects after disconnect
+func TestGameManager_ReconnectPlayer_Success(t *testing.T) {
+	assert := assert.New(t)
+	gm := NewGameManager()
+
+	// Create game with 4 players and start it
+	game, token1, _ := gm.CreateGame("Alice", false)
+	roomCode := game.RoomCode
+
+	_, token2, _, _ := gm.JoinGame(roomCode, "Bob")
+	_, token3, _, _ := gm.JoinGame(roomCode, "Charlie")
+	_, token4, _, _ := gm.JoinGame(roomCode, "Diana")
+
+	// Ready all players
+	gm.SetReady(roomCode, token1, true)
+	gm.SetReady(roomCode, token2, true)
+	gm.SetReady(roomCode, token3, true)
+	gm.SetReady(roomCode, token4, true)
+
+	// Start game
+	err := gm.StartGame(roomCode)
+	assert.NoError(err)
+
+	// Verify game is playing
+	game, _ = gm.GetGame(roomCode)
+	assert.Equal(StatusPlaying, game.Status)
+
+	// Player 0 disconnects
+	shouldPause, game, playerID, err := gm.MarkPlayerDisconnected(token1)
+	assert.NoError(err)
+	assert.True(shouldPause, "Game should pause when player disconnects")
+	assert.Equal(0, playerID)
+	assert.False(game.Players[0].Connected)
+	assert.Equal(StatusPaused, game.Status)
+
+	// Player 0 reconnects
+	game, err = gm.ReconnectPlayer(token1, roomCode, 0)
+	assert.NoError(err)
+	assert.True(game.Players[0].Connected)
+	assert.Equal(StatusPlaying, game.Status, "Game should resume when all players reconnected")
+}
+
+// Test: Reconnect to lobby (Status=lobby)
+// Why: Players should be able to reconnect to lobby, not just active games
+func TestGameManager_ReconnectPlayer_ToLobby(t *testing.T) {
+	assert := assert.New(t)
+	gm := NewGameManager()
+
+	game, token, _ := gm.CreateGame("Alice", false)
+	roomCode := game.RoomCode
+
+	// Disconnect from lobby
+	game.Players[0].Connected = false
+
+	// Reconnect to lobby
+	game, err := gm.ReconnectPlayer(token, roomCode, 0)
+	assert.NoError(err)
+	assert.True(game.Players[0].Connected)
+	assert.Equal(StatusLobby, game.Status, "Game should still be in lobby")
+}
+
+// Test: Reconnect with invalid token
+// Why: Security - can't reconnect as someone else
+func TestGameManager_ReconnectPlayer_InvalidToken(t *testing.T) {
+	assert := assert.New(t)
+	gm := NewGameManager()
+
+	game, _, _ := gm.CreateGame("Alice", false)
+	roomCode := game.RoomCode
+
+	// Try to reconnect with wrong token
+	_, err := gm.ReconnectPlayer("wrong-token", roomCode, 0)
+	assert.Error(err)
+	assert.Contains(err.Error(), "TOKEN_MISMATCH")
+}
+
+// Test: Reconnect to non-existent game
+// Why: Handle case where game was deleted
+func TestGameManager_ReconnectPlayer_GameNotFound(t *testing.T) {
+	assert := assert.New(t)
+	gm := NewGameManager()
+
+	_, err := gm.ReconnectPlayer("any-token", "FAKE", 0)
+	assert.Error(err)
+	assert.Contains(err.Error(), "ROOM_NOT_FOUND")
+}
+
+// Test: Reconnect with invalid player ID
+// Why: Validate player ID is in range [0,3]
+func TestGameManager_ReconnectPlayer_InvalidPlayerID(t *testing.T) {
+	assert := assert.New(t)
+	gm := NewGameManager()
+
+	game, token, _ := gm.CreateGame("Alice", false)
+	roomCode := game.RoomCode
+
+	// Try to reconnect with invalid player IDs
+	_, err := gm.ReconnectPlayer(token, roomCode, -1)
+	assert.Error(err)
+	assert.Contains(err.Error(), "INVALID_PLAYER_ID")
+
+	_, err = gm.ReconnectPlayer(token, roomCode, 4)
+	assert.Error(err)
+	assert.Contains(err.Error(), "INVALID_PLAYER_ID")
+}
+
+// Test: Reconnect to empty slot
+// Why: Can't reconnect to slot with no player
+func TestGameManager_ReconnectPlayer_EmptySlot(t *testing.T) {
+	assert := assert.New(t)
+	gm := NewGameManager()
+
+	game, _, _ := gm.CreateGame("Alice", false)
+	roomCode := game.RoomCode
+
+	// Try to reconnect to empty slot 1
+	_, err := gm.ReconnectPlayer("some-token", roomCode, 1)
+	assert.Error(err)
+	// Token mismatch happens before empty slot check (security first)
+	assert.Contains(err.Error(), "TOKEN_MISMATCH")
+}
+
+// Test: Multiple players disconnect and reconnect
+// Why: Game should only resume when ALL players reconnected
+func TestGameManager_ReconnectPlayer_MultipleDisconnects(t *testing.T) {
+	assert := assert.New(t)
+	gm := NewGameManager()
+
+	// Create game with 4 players and start it
+	game, token1, _ := gm.CreateGame("Alice", false)
+	roomCode := game.RoomCode
+
+	_, token2, _, _ := gm.JoinGame(roomCode, "Bob")
+	_, token3, _, _ := gm.JoinGame(roomCode, "Charlie")
+	_, token4, _, _ := gm.JoinGame(roomCode, "Diana")
+
+	// Ready all and start
+	gm.SetReady(roomCode, token1, true)
+	gm.SetReady(roomCode, token2, true)
+	gm.SetReady(roomCode, token3, true)
+	gm.SetReady(roomCode, token4, true)
+	gm.StartGame(roomCode)
+
+	// Players 0 and 2 disconnect
+	shouldPause, game, _, _ := gm.MarkPlayerDisconnected(token1)
+	assert.True(shouldPause)
+	assert.Equal(StatusPaused, game.Status)
+
+	shouldPause, game, _, _ = gm.MarkPlayerDisconnected(token3)
+	assert.False(shouldPause, "Already paused, should not pause again")
+	assert.Equal(StatusPaused, game.Status)
+
+	// Player 0 reconnects - game still paused (Player 2 still disconnected)
+	game, err := gm.ReconnectPlayer(token1, roomCode, 0)
+	assert.NoError(err)
+	assert.Equal(StatusPaused, game.Status, "Game should stay paused until all reconnect")
+
+	// Player 2 reconnects - now game resumes
+	game, err = gm.ReconnectPlayer(token3, roomCode, 2)
+	assert.NoError(err)
+	assert.Equal(StatusPlaying, game.Status, "Game should resume when all players back")
+}
+
+// Test: Mark player disconnected
+// Why: Core disconnect functionality - mark player as disconnected
+func TestGameManager_MarkPlayerDisconnected_Success(t *testing.T) {
+	assert := assert.New(t)
+	gm := NewGameManager()
+
+	// Create and start game
+	game, token1, _ := gm.CreateGame("Alice", false)
+	roomCode := game.RoomCode
+
+	_, token2, _, _ := gm.JoinGame(roomCode, "Bob")
+	_, token3, _, _ := gm.JoinGame(roomCode, "Charlie")
+	_, token4, _, _ := gm.JoinGame(roomCode, "Diana")
+
+	gm.SetReady(roomCode, token1, true)
+	gm.SetReady(roomCode, token2, true)
+	gm.SetReady(roomCode, token3, true)
+	gm.SetReady(roomCode, token4, true)
+	gm.StartGame(roomCode)
+
+	// Disconnect player 1
+	shouldPause, game, playerID, err := gm.MarkPlayerDisconnected(token2)
+	assert.NoError(err)
+	assert.True(shouldPause)
+	assert.Equal(1, playerID)
+	assert.False(game.Players[1].Connected)
+	assert.Equal(StatusPaused, game.Status)
+}
+
+// Test: Mark player disconnected from lobby (should NOT pause)
+// Why: Lobby doesn't pause, only playing games do
+func TestGameManager_MarkPlayerDisconnected_FromLobby(t *testing.T) {
+	assert := assert.New(t)
+	gm := NewGameManager()
+
+	game, token, _ := gm.CreateGame("Alice", false)
+
+	// Disconnect from lobby
+	shouldPause, game, playerID, err := gm.MarkPlayerDisconnected(token)
+	assert.NoError(err)
+	assert.False(shouldPause, "Lobby should not pause")
+	assert.Equal(0, playerID)
+	assert.False(game.Players[0].Connected)
+	assert.Equal(StatusLobby, game.Status)
+}
+
+// Test: Mark player disconnected with invalid token
+// Why: Error handling for invalid token
+func TestGameManager_MarkPlayerDisconnected_InvalidToken(t *testing.T) {
+	assert := assert.New(t)
+	gm := NewGameManager()
+
+	_, _, _, err := gm.MarkPlayerDisconnected("invalid-token")
+	assert.Error(err)
+	assert.Contains(err.Error(), "TOKEN_NOT_FOUND")
+}
+
+// Test: Pause game
+// Why: Explicit pause method for game state transition
+func TestGameManager_PauseGame_Success(t *testing.T) {
+	assert := assert.New(t)
+	gm := NewGameManager()
+
+	// Create and start game
+	game, token1, _ := gm.CreateGame("Alice", false)
+	roomCode := game.RoomCode
+
+	_, token2, _, _ := gm.JoinGame(roomCode, "Bob")
+	_, token3, _, _ := gm.JoinGame(roomCode, "Charlie")
+	_, token4, _, _ := gm.JoinGame(roomCode, "Diana")
+
+	gm.SetReady(roomCode, token1, true)
+	gm.SetReady(roomCode, token2, true)
+	gm.SetReady(roomCode, token3, true)
+	gm.SetReady(roomCode, token4, true)
+	gm.StartGame(roomCode)
+
+	// Pause game
+	didPause, err := gm.PauseGame(roomCode)
+	assert.NoError(err)
+	assert.True(didPause)
+
+	game, _ = gm.GetGame(roomCode)
+	assert.Equal(StatusPaused, game.Status)
+}
+
+// Test: Pause game that's already paused (no-op)
+// Why: Should handle gracefully without error
+func TestGameManager_PauseGame_AlreadyPaused(t *testing.T) {
+	assert := assert.New(t)
+	gm := NewGameManager()
+
+	// Create and start game
+	game, token1, _ := gm.CreateGame("Alice", false)
+	roomCode := game.RoomCode
+
+	_, token2, _, _ := gm.JoinGame(roomCode, "Bob")
+	_, token3, _, _ := gm.JoinGame(roomCode, "Charlie")
+	_, token4, _, _ := gm.JoinGame(roomCode, "Diana")
+
+	gm.SetReady(roomCode, token1, true)
+	gm.SetReady(roomCode, token2, true)
+	gm.SetReady(roomCode, token3, true)
+	gm.SetReady(roomCode, token4, true)
+	gm.StartGame(roomCode)
+
+	// Pause once
+	didPause, err := gm.PauseGame(roomCode)
+	assert.NoError(err)
+	assert.True(didPause)
+
+	// Pause again - should be no-op
+	didPause, err = gm.PauseGame(roomCode)
+	assert.NoError(err)
+	assert.False(didPause, "Should not pause again if already paused")
+
+	game, _ = gm.GetGame(roomCode)
+	assert.Equal(StatusPaused, game.Status)
+}
+
+// Test: Pause lobby (should not pause)
+// Why: Only playing games can be paused
+func TestGameManager_PauseGame_Lobby(t *testing.T) {
+	assert := assert.New(t)
+	gm := NewGameManager()
+
+	game, _, _ := gm.CreateGame("Alice", false)
+	roomCode := game.RoomCode
+
+	// Try to pause lobby
+	didPause, err := gm.PauseGame(roomCode)
+	assert.NoError(err)
+	assert.False(didPause, "Lobby should not pause")
+
+	game, _ = gm.GetGame(roomCode)
+	assert.Equal(StatusLobby, game.Status)
+}
+
+// Test: Pause non-existent game
+// Why: Error handling
+func TestGameManager_PauseGame_NotFound(t *testing.T) {
+	assert := assert.New(t)
+	gm := NewGameManager()
+
+	_, err := gm.PauseGame("FAKE")
+	assert.Error(err)
+	assert.Contains(err.Error(), "ROOM_NOT_FOUND")
+}
+
+// Test: All players disconnect then all reconnect
+// Why: Edge case - complete disconnect/reconnect cycle
+func TestGameManager_Reconnection_AllDisconnectAllReconnect(t *testing.T) {
+	assert := assert.New(t)
+	gm := NewGameManager()
+
+	// Create game with 4 players and start it
+	game, token1, _ := gm.CreateGame("Alice", false)
+	roomCode := game.RoomCode
+
+	_, token2, _, _ := gm.JoinGame(roomCode, "Bob")
+	_, token3, _, _ := gm.JoinGame(roomCode, "Charlie")
+	_, token4, _, _ := gm.JoinGame(roomCode, "Diana")
+
+	gm.SetReady(roomCode, token1, true)
+	gm.SetReady(roomCode, token2, true)
+	gm.SetReady(roomCode, token3, true)
+	gm.SetReady(roomCode, token4, true)
+	gm.StartGame(roomCode)
+
+	// All players disconnect
+	gm.MarkPlayerDisconnected(token1)
+	gm.MarkPlayerDisconnected(token2)
+	gm.MarkPlayerDisconnected(token3)
+	gm.MarkPlayerDisconnected(token4)
+
+	game, _ = gm.GetGame(roomCode)
+	assert.Equal(StatusPaused, game.Status)
+	assert.False(game.Players[0].Connected)
+	assert.False(game.Players[1].Connected)
+	assert.False(game.Players[2].Connected)
+	assert.False(game.Players[3].Connected)
+
+	// All players reconnect
+	gm.ReconnectPlayer(token1, roomCode, 0)
+	game, _ = gm.GetGame(roomCode)
+	assert.Equal(StatusPaused, game.Status, "Still paused with only 1 player")
+
+	gm.ReconnectPlayer(token2, roomCode, 1)
+	game, _ = gm.GetGame(roomCode)
+	assert.Equal(StatusPaused, game.Status, "Still paused with only 2 players")
+
+	gm.ReconnectPlayer(token3, roomCode, 2)
+	game, _ = gm.GetGame(roomCode)
+	assert.Equal(StatusPaused, game.Status, "Still paused with only 3 players")
+
+	gm.ReconnectPlayer(token4, roomCode, 3)
+	game, _ = gm.GetGame(roomCode)
+	assert.Equal(StatusPlaying, game.Status, "Should resume with all 4 players")
+}
