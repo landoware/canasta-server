@@ -108,6 +108,12 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 			log.Printf("Player %d (%s) disconnected from game %s",
 				playerID, game.Players[playerID].Username, game.RoomCode)
 
+			// Persist disconnect state
+			// Why: If server crashes after disconnect but before periodic save, game would reload incorrectly
+			if err := s.persistenceManager.SaveGame(game); err != nil {
+				log.Printf("Failed to persist game %s after disconnect: %v", game.RoomCode, err)
+			}
+
 			// Broadcast disconnect notification
 			s.broadcastToLobby(game, "player_disconnected", PlayerStatusNotification{
 				PlayerID:  playerID,
@@ -261,13 +267,25 @@ func (s *Server) handleCreateGame(socket *websocket.Conn, ctx context.Context, c
 	}
 
 	// Store session and token mapping
-	s.sessionManager.StoreSession(SessionInfo{
+	session := SessionInfo{
 		Token:    token,
 		RoomCode: game.RoomCode,
 		PlayerID: 0,
 		Username: req.Username,
-	})
+	}
+	s.sessionManager.StoreSession(session)
 	s.connectionManager.AddConnectionWithToken(connectionID, socket, token)
+
+	// Persist to database
+	if err := s.persistenceManager.SaveGame(game); err != nil {
+		log.Printf("Failed to persist game %s: %v", game.RoomCode, err)
+	}
+	if err := s.persistenceManager.SaveSession(session); err != nil {
+		log.Printf("Failed to persist session %s: %v", token, err)
+	}
+	if err := s.persistenceManager.SaveRoomCode(game.RoomCode, true); err != nil {
+		log.Printf("Failed to persist room code %s: %v", game.RoomCode, err)
+	}
 
 	// Step 4: Send response to creator
 	response := ServerMessage{
@@ -304,13 +322,22 @@ func (s *Server) handleJoinGame(socket *websocket.Conn, ctx context.Context, con
 	}
 
 	// Store token mapping
-	s.sessionManager.StoreSession(SessionInfo{
+	session := SessionInfo{
 		Token:    token,
 		RoomCode: game.RoomCode,
 		PlayerID: slotID,
 		Username: req.Username,
-	})
+	}
+	s.sessionManager.StoreSession(session)
 	s.connectionManager.AddConnectionWithToken(connectionID, socket, token)
+
+	// Persist to database
+	if err := s.persistenceManager.SaveGame(game); err != nil {
+		log.Printf("Failed to persist game %s: %v", game.RoomCode, err)
+	}
+	if err := s.persistenceManager.SaveSession(session); err != nil {
+		log.Printf("Failed to persist session %s: %v", token, err)
+	}
 
 	// Send response to joiner
 	response := ServerMessage{
@@ -370,6 +397,12 @@ func (s *Server) handleReconnect(socket *websocket.Conn, ctx context.Context, co
 	if err != nil {
 		s.sendError(socket, ctx, err.Error())
 		return
+	}
+
+	// Persist reconnection state
+	// Why: If server crashes after reconnect but before periodic save, game would reload as paused
+	if err := s.persistenceManager.SaveGame(game); err != nil {
+		log.Printf("Failed to persist game %s after reconnect: %v", game.RoomCode, err)
 	}
 
 	// Respond to the player
@@ -454,14 +487,24 @@ func (s *Server) handleSetReady(socket *websocket.Conn, ctx context.Context, con
 		return
 	}
 
-	// Step 5: Broadcast lobby update
+	// Step 5: Persist ready state change
+	if err := s.persistenceManager.SaveGame(game); err != nil {
+		log.Printf("Failed to persist game %s: %v", game.RoomCode, err)
+	}
+
+	// Step 6: Broadcast lobby update
 	s.broadcastLobbyUpdate(game)
 
-	// Step 6: If all ready, start game!
+	// Step 7: If all ready, start game!
 	if allReady {
 		if err := s.gameManager.StartGame(game.RoomCode); err != nil {
 			log.Printf("Failed to start game: %v", err)
 			return
+		}
+
+		// Persist game start
+		if err := s.persistenceManager.SaveGame(game); err != nil {
+			log.Printf("Failed to persist game %s after start: %v", game.RoomCode, err)
 		}
 
 		// Broadcast game started notification
@@ -509,7 +552,12 @@ func (s *Server) handleUpdateTeamOrder(socket *websocket.Conn, ctx context.Conte
 		return
 	}
 
-	// Step 5: Broadcast lobby update
+	// Step 5: Persist team order change
+	if err := s.persistenceManager.SaveGame(game); err != nil {
+		log.Printf("Failed to persist game %s: %v", game.RoomCode, err)
+	}
+
+	// Step 6: Broadcast lobby update
 	// Why: Everyone sees new arrangement
 	s.broadcastLobbyUpdate(game)
 }
@@ -534,6 +582,14 @@ func (s *Server) handleLeaveGame(socket *websocket.Conn, ctx context.Context, co
 	if err != nil {
 		s.sendError(socket, ctx, err.Error())
 		return
+	}
+
+	// Persist leave (game state changed) and remove session
+	if err := s.persistenceManager.SaveGame(game); err != nil {
+		log.Printf("Failed to persist game %s: %v", game.RoomCode, err)
+	}
+	if err := s.persistenceManager.DeleteSession(token); err != nil {
+		log.Printf("Failed to delete session %s: %v", token, err)
 	}
 
 	// Broadcast lobby update
@@ -755,6 +811,13 @@ func (s *Server) handleExecuteMove(socket *websocket.Conn, ctx context.Context, 
 
 	// Step 8: Move succeeded - update timestamp
 	game.UpdatedAt = time.Now()
+
+	// Step 8a: Persist game state after move
+	// Why here: After move succeeds but before broadcasting
+	// If persistence fails, we still broadcast (prioritize gameplay over persistence)
+	if err := s.persistenceManager.SaveGame(game); err != nil {
+		log.Printf("Failed to persist game %s after move: %v", game.RoomCode, err)
+	}
 
 	// Step 9: Detect hand/game end
 	// Why check: Hand end triggers scoring, game end triggers completion

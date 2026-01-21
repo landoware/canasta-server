@@ -22,6 +22,10 @@ type Service interface {
 	// Close terminates the database connection.
 	// It returns an error if the connection cannot be closed.
 	Close() error
+
+	// DB returns the underlying database connection.
+	// This is used by PersistenceManager to execute queries.
+	DB() *sql.DB
 }
 
 type service struct {
@@ -110,4 +114,10 @@ func (s *service) Health() map[string]string {
 func (s *service) Close() error {
 	log.Printf("Disconnected from database: %s", dburl)
 	return s.db.Close()
+}
+
+// DB returns the underlying *sql.DB connection.
+// This allows other components (like PersistenceManager) to execute custom queries.
+func (s *service) DB() *sql.DB {
+	return s.db
 }

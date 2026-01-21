@@ -2,14 +2,18 @@ package server
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 
 	"github.com/coder/websocket"
+	_ "github.com/mattn/go-sqlite3"
+	"github.com/pressly/goose/v3"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -179,10 +183,25 @@ func TestWebSocketMultipleConnections(t *testing.T) {
 }
 
 func setupTestServer() (*Server, string, func()) {
+	// Create in-memory database for tests
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		panic(err)
+	}
+
+	// Set up goose and run migrations
+	if err := goose.SetDialect("sqlite3"); err != nil {
+		panic(err)
+	}
+	if err := goose.Up(db, "../../db/migrations"); err != nil {
+		panic(err)
+	}
+
 	s := &Server{
-		connectionManager: NewConnectionManager(),
-		gameManager:       NewGameManager(),
-		sessionManager:    NewSessionManager(), // Phase 3: Add SessionManager
+		connectionManager:  NewConnectionManager(),
+		gameManager:        NewGameManager(),
+		sessionManager:     NewSessionManager(),
+		persistenceManager: NewPersistenceManager(db), // Phase 6: Add PersistenceManager
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(s.websocketHandler))
@@ -190,6 +209,9 @@ func setupTestServer() (*Server, string, func()) {
 
 	cleanup := func() {
 		server.Close()
+		db.Close()
+		// Clean up any test database files
+		os.Remove("test_persistence.db")
 	}
 
 	return s, url, cleanup
