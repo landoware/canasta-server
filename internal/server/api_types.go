@@ -143,3 +143,37 @@ type GameStateMessage struct {
 	Phase         string      `json:"phase"`
 	Status        string      `json:"status"`
 }
+
+// ============================================================================
+// EXECUTE MOVE (execute_move) - Phase 5
+// ============================================================================
+// tygo:generate
+type MoveRequest struct {
+	Type string `json:"type"`          // Move type from canasta package (e.g., "draw_from_deck")
+	Ids  []int  `json:"ids,omitempty"` // Card IDs for moves that require multiple cards
+	Id   int    `json:"id,omitempty"`  // Single card ID for moves that require one card
+}
+
+// tygo:generate
+type MoveResultResponse struct {
+	Success bool   `json:"success"`
+	Message string `json:"message,omitempty"`
+}
+
+// ============================================================================
+// HAND/GAME END NOTIFICATIONS - Phase 5
+// ============================================================================
+// tygo:generate
+type HandEndedNotification struct {
+	HandNumber    int  `json:"handNumber"`    // Hand that just ended
+	TeamAScore    int  `json:"teamAScore"`    // Team A's total score
+	TeamBScore    int  `json:"teamBScore"`    // Team B's total score
+	NextHandReady bool `json:"nextHandReady"` // true if starting new hand, false if game ended
+}
+
+// tygo:generate
+type GameEndedNotification struct {
+	TeamAScore int    `json:"teamAScore"`
+	TeamBScore int    `json:"teamBScore"`
+	WinnerTeam string `json:"winnerTeam"` // "TeamA" or "TeamB"
+}

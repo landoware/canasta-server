@@ -42,20 +42,20 @@ func (g *Game) DrawFromDeck(p *Player) {
 
 func (g *Game) PickUpDiscardPile(p *Player, cardIds []int) error {
 	if len(cardIds) < 2 {
-		return errors.New("Must provide at least two cards to make a new meld")
+		return errors.New("INVALID_MELD: Must provide at least two cards to make a new meld")
 	}
 
 	topCard := g.Hand.DiscardPile[len(g.Hand.DiscardPile)-1]
 	if topCard.Rank == Three {
-		return errors.New("Cannot pickup the pile with a black three")
+		return errors.New("PILE_FROZEN: Cannot pickup the pile with a black three on top")
 	}
 
 	for _, cardId := range cardIds {
 		if p.Hand[cardId].Rank != topCard.Rank && !p.Hand[cardId].IsWild() && !topCard.IsWild() {
-			return fmt.Errorf("New meld must be created with %ss", topCard.Rank.String())
+			return fmt.Errorf("MELD_MISMATCH: New meld must be created with %ss", topCard.Rank.String())
 		}
 		if topCard.IsWild() && !p.Hand[cardId].IsWild() {
-			return errors.New("New meld must be created with wildcards")
+			return errors.New("MELD_MISMATCH: New meld must be created with wildcards")
 		}
 	}
 
@@ -247,7 +247,7 @@ func (g *Game) Discard(p *Player, cardId int) error {
 	// If not they need at least two cards in their hand PRIOR to discarding.
 	if !p.Team.CanGoOut {
 		if len(p.Hand) < 2 {
-			return errors.New("Can't go out yet!")
+			return errors.New("CANNOT_GO_OUT: Need permission from partner before going out")
 		}
 	}
 
@@ -271,7 +271,7 @@ func (g *Game) Discard(p *Player, cardId int) error {
 func (g *Game) PickUpFoot(p *Player) error {
 	// Must have completed a Canasta
 	if !p.MadeCanasta {
-		return errors.New("Must complete a canasta first")
+		return errors.New("NO_CANASTA: Must complete a canasta before picking up foot")
 	}
 	// Cannot be your turn, or you need to be in draw phase
 

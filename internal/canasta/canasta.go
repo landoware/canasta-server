@@ -225,7 +225,7 @@ func (g *Game) EndHand() {
 
 	g.Score()
 
-	if g.HandNumber == 4 {
+	if g.HandNumber >= 4 {
 		g.EndGame()
 	}
 

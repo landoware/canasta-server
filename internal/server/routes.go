@@ -1,11 +1,13 @@
 package server
 
 import (
+	"canasta-server/internal/canasta"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/coder/websocket"
 	"github.com/google/uuid"
@@ -168,6 +170,9 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 
 		case "leave_game":
 			s.handleLeaveGame(socket, ctx, connectionID, msg.Payload)
+
+		case "execute_move":
+			s.handleExecuteMove(socket, ctx, connectionID, msg.Payload)
 		default:
 			log.Printf("Unknown message type '%s' from %s", msg.Type, connectionID)
 			s.sendError(socket, ctx, fmt.Sprintf("Unknown message type: %s", msg.Type))
@@ -681,4 +686,123 @@ func (s *Server) buildGameStateMessage(game *ActiveGame, playerID int) GameState
 		Phase:         string(game.Game.Phase),
 		Status:        string(game.Status),
 	}
+}
+
+// handleExecuteMove processes game moves from players
+// Why in routes.go: Follows same pattern as other handlers, keeps all WebSocket logic together
+func (s *Server) handleExecuteMove(socket *websocket.Conn, ctx context.Context, connectionID string, payload json.RawMessage) {
+	// Step 1: Parse request
+	var req MoveRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		s.sendError(socket, ctx, "INVALID_PAYLOAD: Invalid move request")
+		return
+	}
+
+	// Step 2: Get player's token
+	token := s.connectionManager.GetTokenByConnection(connectionID)
+	if token == "" {
+		s.sendError(socket, ctx, "NOT_IN_GAME: No active game session")
+		return
+	}
+
+	// Step 3: Get game by token
+	game, playerID, err := s.gameManager.GetGameByToken(token)
+	if err != nil {
+		s.sendError(socket, ctx, err.Error())
+		return
+	}
+
+	// Step 4: Validate game status
+	// Why: Can't make moves in lobby, paused, or completed games
+	if game.Status != StatusPlaying {
+		if game.Status == StatusLobby {
+			s.sendError(socket, ctx, "GAME_NOT_STARTED: Game hasn't started yet")
+			return
+		} else if game.Status == StatusPaused {
+			s.sendError(socket, ctx, "GAME_PAUSED: Game is paused due to disconnection")
+			return
+		} else if game.Status == StatusCompleted {
+			s.sendError(socket, ctx, "GAME_COMPLETED: Game has ended")
+			return
+		}
+	}
+
+	// Step 5: Capture state before move for hand end detection
+	previousHandNumber := game.Game.HandNumber
+
+	// Step 6: Build and execute move
+	// Why construct here: We need to add playerID from server context
+	move := canasta.Move{
+		PlayerId: playerID,
+		Type:     canasta.MoveType(req.Type),
+		Ids:      req.Ids,
+		Id:       req.Id,
+	}
+
+	response := game.Game.ExecuteMove(move)
+
+	// Step 7: Handle move failure
+	if !response.Success {
+		s.sendMessage(socket, ctx, ServerMessage{
+			Type: "move_result",
+			Payload: MoveResultResponse{
+				Success: false,
+				Message: response.Message,
+			},
+		})
+		return
+	}
+
+	// Step 8: Move succeeded - update timestamp
+	game.UpdatedAt = time.Now()
+
+	// Step 9: Detect hand/game end
+	// Why check: Hand end triggers scoring, game end triggers completion
+	handEnded := game.Game.HandNumber != previousHandNumber
+
+	if handEnded {
+		// Hand ended - send notification with scores
+		s.broadcastToLobby(game, "hand_ended", HandEndedNotification{
+			HandNumber:    previousHandNumber, // The hand that just ended
+			TeamAScore:    game.Game.TeamA.Score,
+			TeamBScore:    game.Game.TeamB.Score,
+			NextHandReady: game.Game.HandNumber < 4, // false if game ended (hand 4 complete)
+		})
+
+		// Check if game ended (4 hands complete)
+		if game.Game.HandNumber >= 4 {
+			// Game completed
+			game.Status = StatusCompleted
+
+			// Determine winner (handle ties)
+			winnerTeam := "Tie"
+			if game.Game.TeamA.Score > game.Game.TeamB.Score {
+				winnerTeam = "TeamA"
+			} else if game.Game.TeamB.Score > game.Game.TeamA.Score {
+				winnerTeam = "TeamB"
+			}
+
+			s.broadcastToLobby(game, "game_ended", GameEndedNotification{
+				TeamAScore: game.Game.TeamA.Score,
+				TeamBScore: game.Game.TeamB.Score,
+				WinnerTeam: winnerTeam,
+			})
+
+			log.Printf("Game %s completed. Winner: %s (A:%d B:%d)",
+				game.RoomCode, winnerTeam, game.Game.TeamA.Score, game.Game.TeamB.Score)
+		}
+	}
+
+	// Step 10: Broadcast game state to all players
+	// Why: All players need to see the updated state
+	s.broadcastGameState(game)
+
+	// Step 11: Send success response to requesting player
+	// Why after broadcast: Ensures player gets confirmation after state is consistent
+	s.sendMessage(socket, ctx, ServerMessage{
+		Type: "move_result",
+		Payload: MoveResultResponse{
+			Success: true,
+		},
+	})
 }

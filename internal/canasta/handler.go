@@ -30,7 +30,7 @@ type Move struct {
 }
 
 type MoveResponse struct {
-	Success bool   `json:"successs"`
+	Success bool   `json:"success"`
 	Message string `json:"message"`
 }
 
@@ -39,7 +39,7 @@ func (g *Game) ExecuteMove(move Move) MoveResponse {
 	if g.CurrentPlayer != move.PlayerId {
 		return MoveResponse{
 			Success: false,
-			Message: "Not your turn",
+			Message: "NOT_YOUR_TURN: Wait for your turn",
 		}
 	}
 
