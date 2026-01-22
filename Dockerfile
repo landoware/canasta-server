@@ -13,7 +13,9 @@ RUN CGO_ENABLED=1 GOOS=linux go build -o main cmd/api/main.go
 FROM alpine:3.20.1 AS prod
 WORKDIR /app
 COPY --from=build /app/main /app/main
-EXPOSE ${PORT}
+COPY --from=build /app/db/migrations /app/db/migrations
+RUN mkdir -p /app/db
+EXPOSE 8080
 CMD ["./main"]
 
 

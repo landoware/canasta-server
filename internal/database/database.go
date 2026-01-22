@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"os"
 	"strconv"
 	"time"
 
@@ -33,7 +32,7 @@ type service struct {
 }
 
 var (
-	dburl      = os.Getenv("DB_URL")
+	dburl      = "./db/canasta.db"
 	dbInstance *service
 )
 

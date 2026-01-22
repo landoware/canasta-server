@@ -6,11 +6,7 @@ services:
       target: prod
     restart: unless-stopped
     ports:
-      - ${PORT}:${PORT}
-    environment:
-      APP_ENV: ${APP_ENV}
-      PORT: ${PORT}
-      DB_URL: ${DB_URL}
+      - "8080:8080"
     volumes:
       - sqlite:/app/db
 volumes:

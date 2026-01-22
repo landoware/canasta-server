@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
-	"strconv"
 	"time"
 
 	_ "github.com/joho/godotenv/autoload"
@@ -31,7 +29,7 @@ type Server struct {
 // Returns both the custom Server (for shutdown logic) and http.Server (for serving)
 // Why both: Need access to Server methods while http.Server handles HTTP lifecycle
 func NewServer() (*Server, *http.Server) {
-	port, _ := strconv.Atoi(os.Getenv("PORT"))
+	port := 8080
 
 	// Initialize database
 	dbService := database.New()
