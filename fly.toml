@@ -19,7 +19,7 @@ processes = ['app']
 
 [[mounts]]
 source = "canasta_data"
-destination = "/app/db"
+destination = "/app/db/data"
 
 [[vm]]
 memory = '1gb'

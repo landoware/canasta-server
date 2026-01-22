@@ -32,7 +32,7 @@ type service struct {
 }
 
 var (
-	dburl      = "./db/canasta.db"
+	dburl      = "./db/data/canasta.db"
 	dbInstance *service
 )
 
