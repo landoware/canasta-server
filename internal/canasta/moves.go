@@ -6,10 +6,6 @@ import (
 	"slices"
 )
 
-/*
- * Draw Phase
- */
-
 func (g *Game) DrawFromDeck(p *Player) {
 	cards := g.Hand.Deck.Draw(2)
 
@@ -99,10 +95,6 @@ func (g *Game) PickUpDiscardPile(p *Player, cardIds []int) error {
 	g.Phase = PhasePlaying
 	return nil
 }
-
-/*
- * Play Phase
- */
 
 func (g *Game) NewMeld(p *Player, cardIds []int) error {
 	meld, err := p.ValidateMeld(cardIds)
@@ -239,9 +231,6 @@ func (g *Game) GoDown(p *Player) error {
 	return nil
 }
 
-/*
- * End Phase
- */
 func (g *Game) Discard(p *Player, cardId int) error {
 	// Are they allowed to go out?
 	// If not they need at least two cards in their hand PRIOR to discarding.
@@ -263,10 +252,6 @@ func (g *Game) Discard(p *Player, cardId int) error {
 	g.CurrentPlayer = (g.CurrentPlayer + 1) % 4
 	return nil
 }
-
-/*
- * Special Moves
- */
 
 func (g *Game) PickUpFoot(p *Player) error {
 	// Must have completed a Canasta
@@ -332,128 +317,6 @@ func (g *Game) PlayRedThree(p *Player, cardIds []int, fromFoot bool) error {
 	return nil
 }
 
-func (g *Game) MoveAskToGoOut(p *Player) error {
-	// Check if there's already a pending request
-	// Why: Only one go-out request can be active at a time
-	if g.GoOutRequestPending {
-		return errors.New("GO_OUT_PENDING: A go-out request is already pending")
-	}
-
-	// Validate team has all 4 required canasta types
-	// Why: Standard Canasta rules require all 4 types before going out
-	// Types: Wildcards (2500pts), Sevens (1500pts), Natural (500pts), Unnatural (300pts)
-
-	hasWildcards := false
-	hasSevens := false
-	hasNatural := false
-	hasUnnatural := false
-
-	for _, canasta := range p.Team.Canastas {
-		if canasta.Rank == Wild {
-			hasWildcards = true
-		} else if canasta.Rank == Seven {
-			hasSevens = true
-			// Natural sevens also counts as a natural canasta
-			// Why: It's both a sevens canasta AND natural
-			if canasta.Natural {
-				hasNatural = true
-			}
-		} else if canasta.Natural {
-			hasNatural = true
-		} else {
-			// Mixed canasta (has wilds, not natural)
-			hasUnnatural = true
-		}
-	}
-
-	// Check all requirements
-	if !hasWildcards {
-		return errors.New("MISSING_CANASTA: Team needs a Wildcards canasta (2500pts) to go out")
-	}
-	if !hasSevens {
-		return errors.New("MISSING_CANASTA: Team needs a Sevens canasta (1500pts) to go out")
-	}
-	if !hasNatural {
-		return errors.New("MISSING_CANASTA: Team needs a Natural canasta (500pts) to go out")
-	}
-	if !hasUnnatural {
-		return errors.New("MISSING_CANASTA: Team needs an Unnatural/Mixed canasta (300pts) to go out")
-	}
-
-	// All canastas present - set up partner permission request
-	// Find player's ID
-	playerID := -1
-	for i, player := range g.Players {
-		if player == p {
-			playerID = i
-			break
-		}
-	}
-
-	// Find partner's ID
-	partnerID := -1
-	for i, player := range g.Players {
-		if player == p.partner {
-			partnerID = i
-			break
-		}
-	}
-
-	// Set permission request state
-	g.GoOutRequestPending = true
-	g.GoOutRequester = playerID
-	g.GoOutPartner = partnerID
-
-	// Note: Server will broadcast this to the partner
-	// Partner must respond with respond_go_out
-
-	return nil
-}
-
-func (g *Game) RespondToGoOut(p *Player, approved bool) error {
-	// Validate there's a pending request
-	// Why: Can't respond if no one asked
-	if !g.GoOutRequestPending {
-		return errors.New("NO_REQUEST: No go-out request is pending")
-	}
-
-	// Find player's ID
-	playerID := -1
-	for i, player := range g.Players {
-		if player == p {
-			playerID = i
-			break
-		}
-	}
-
-	// Validate this is the partner who needs to respond
-	// Why: Only the partner can approve/deny
-	if playerID != g.GoOutPartner {
-		return errors.New("NOT_PARTNER: Only the partner can respond to go-out request")
-	}
-
-	// Clear the request state
-	requesterID := g.GoOutRequester
-	g.GoOutRequestPending = false
-	g.GoOutRequester = -1
-	g.GoOutPartner = -1
-
-	// If approved, set CanGoOut on the team
-	// Why: Requester can now discard to end the hand
-	if approved {
-		p.Team.CanGoOut = true
-	}
-
-	// Note: Server will broadcast the response to both players
-	// Return requester ID for server to know who to notify
-	_ = requesterID // Will be used by server layer
-
-	return nil
-}
-
-/*
- * Misc methods
- */
 func (p *Player) ValidateMeld(cardIds []int) (meld Meld, err error) {
 	if len(cardIds) < 3 {
 		return meld, errors.New("Melds require at least three cards.")

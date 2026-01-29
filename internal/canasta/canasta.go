@@ -7,17 +7,14 @@ import (
 )
 
 type Game struct {
-	Id                  string    `json:"id"`
-	Players             []*Player `json:"players"`
-	TeamA               *Team     `json:"teamA"`
-	TeamB               *Team     `json:"teamB"`
-	Hand                *Hand     `json:"hand"`
-	HandNumber          int       `json:"handNumber"`
-	CurrentPlayer       int       `json:"currentPlayer"`
-	Phase               TurnPhase `json:"phase"`
-	GoOutRequestPending bool      `json:"goOutRequestPending"` // True when permission request is active
-	GoOutRequester      int       `json:"goOutRequester"`      // Player ID who asked permission (-1 if none)
-	GoOutPartner        int       `json:"goOutPartner"`        // Partner ID who needs to respond (-1 if none)
+	Id            string    `json:"id"`
+	Players       []*Player `json:"players"`
+	TeamA         *Team     `json:"teamA"`
+	TeamB         *Team     `json:"teamB"`
+	Hand          *Hand     `json:"hand"`
+	HandNumber    int       `json:"handNumber"`
+	CurrentPlayer int       `json:"currentPlayer"`
+	Phase         TurnPhase `json:"phase"`
 }
 
 type TurnPhase string
@@ -214,15 +211,12 @@ func NewGame(id string, playerNames []string, options ...GameOption) Game {
 	hand.Deck.Shuffle()
 
 	return Game{
-		Id:                  id,
-		TeamA:               &teamA,
-		TeamB:               &teamB,
-		Players:             players,
-		Hand:                hand,
-		HandNumber:          1,
-		GoOutRequestPending: false,
-		GoOutRequester:      -1,
-		GoOutPartner:        -1,
+		Id:         id,
+		TeamA:      &teamA,
+		TeamB:      &teamB,
+		Players:    players,
+		Hand:       hand,
+		HandNumber: 1,
 	}
 }
 
@@ -256,11 +250,6 @@ func (g *Game) NewHand() {
 	g.TeamB.Canastas = make([]Canasta, 0)
 	g.TeamB.GoneDown = false
 	g.TeamB.RedThrees = make([]Card, 0)
-
-	// Reset go-out permission state
-	g.GoOutRequestPending = false
-	g.GoOutRequester = -1
-	g.GoOutPartner = -1
 
 	hand := &Hand{
 		Deck:        NewDeck(),
