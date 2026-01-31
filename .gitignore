@@ -33,4 +33,3 @@ main
 .DS_Store
 
 db/test.db
-api
