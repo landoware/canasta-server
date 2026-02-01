@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+	"github.com/coder/websocket/wsjson"
 )
 
 func (s *Server) RegisterRoutes() http.Handler {
@@ -45,7 +47,8 @@ func (s *Server) newGameHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	code := newRoomCode()
-	fmt.Println(code)
+
+	s.hub.GetOrCreateRoom(code)
 
 	resp := struct {
 		Code string `json:"code"`
@@ -65,15 +68,13 @@ func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close(websocket.StatusGoingAway, "Server closing websocket")
 
-	ctx := r.Context()
-	socketCtx := conn.CloseRead(ctx)
+	ctx := context.Background()
 
 	for {
-		payload := fmt.Sprintf("server timestamp: %d", time.Now().UnixNano())
-		if err := conn.Write(socketCtx, websocket.MessageText, []byte(payload)); err != nil {
-			log.Printf("Failed to write to socket: %v", err)
-			break
+		var v any
+		err := wsjson.Read(ctx, conn, &v)
+		if err != nil {
+			return nil, err
 		}
-		time.Sleep(2 * time.Second)
 	}
 }
