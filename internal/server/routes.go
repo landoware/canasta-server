@@ -1,6 +1,7 @@
 package server
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 
@@ -15,6 +16,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	// Register routes
 	mux.HandleFunc("/ws", s.websocketHandler)
+	mux.HandleFunc("/new", s.newGameHandler)
 
 	// Wrap the mux with CORS middleware
 	return s.corsMiddleware(mux)
@@ -37,6 +39,22 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 		// Proceed with the next handler
 		next.ServeHTTP(w, r)
 	})
+}
+
+func (s *Server) newGameHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	code := newRoomCode()
+	fmt.Println(code)
+
+	resp := struct {
+		Code string `json:"code"`
+	}{Code: code}
+
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		http.Error(w, "{}", http.StatusInternalServerError)
+		return
+	}
 }
 
 func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
