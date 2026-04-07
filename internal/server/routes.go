@@ -1,16 +1,13 @@
 package server
 
 import (
-	"context"
+	// "context"
 	"encoding/json"
-	"log"
-	"net/http"
-
 	"fmt"
-	"time"
+	"net/http"
+	"os"
 
 	"github.com/coder/websocket"
-	"github.com/coder/websocket/wsjson"
 )
 
 func (s *Server) RegisterRoutes() http.Handler {
@@ -26,8 +23,9 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
 		// Set CORS headers
-		w.Header().Set("Access-Control-Allow-Origin", "*") // Replace "*" with specific origins if needed
+		w.Header().Set("Access-Control-Allow-Origin", os.Getenv("CLIENT_URL"))
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
 		w.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type, X-CSRF-Token")
 		w.Header().Set("Access-Control-Allow-Credentials", "false") // Set to "true" if credentials are required
@@ -61,20 +59,12 @@ func (s *Server) newGameHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) websocketHandler(w http.ResponseWriter, r *http.Request) {
-	conn, err := websocket.Accept(w, r, nil)
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		OriginPatterns: []string{os.Getenv("CLIENT_URL")},
+	})
 	if err != nil {
-		http.Error(w, "Failed to open websocket", http.StatusInternalServerError)
+		fmt.Print(err)
 		return
 	}
 	defer conn.Close(websocket.StatusGoingAway, "Server closing websocket")
-
-	ctx := context.Background()
-
-	for {
-		var v any
-		err := wsjson.Read(ctx, conn, &v)
-		if err != nil {
-			return nil, err
-		}
-	}
 }
