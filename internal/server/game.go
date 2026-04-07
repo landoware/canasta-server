@@ -56,55 +56,7 @@ func NewRoom(code string) *Room {
 }
 
 func (r *Room) run() {
-	ticker := time.NewTicker(30 * time.Second)
-	defer ticker.Stop()
 
-	for {
-		select {
-		case c := <-r.join:
-			r.clients[c.playerID] = c
-			r.lastActivity = time.Now()
-
-			// Send snapshot to just this client
-			c.sendJSON(ServerMsg{
-				T:       "snapshot",
-				Version: r.version,
-				Data:    r.state.PublicViewFor(c.playerID), // implement projection if needed
-			})
-
-			// Notify others (optional)
-			r.broadcast(ServerMsg{T: "event", Version: r.version, Data: map[string]any{
-				"type":     "player_joined",
-				"playerId": c.playerID,
-				"name":     c.name,
-			}}, nil)
-
-		case c := <-r.leave:
-			if _, ok := r.clients[c.playerID]; ok {
-				delete(r.clients, c.playerID)
-				r.lastActivity = time.Now()
-				r.broadcast(ServerMsg{T: "event", Version: r.version, Data: map[string]any{
-					"type":     "player_left",
-					"playerId": c.playerID,
-				}}, nil)
-			}
-
-		case in := <-r.in:
-			r.lastActivity = time.Now()
-			r.handleInbound(in.from, in.msg)
-
-		case <-ticker.C:
-			// housekeeping: if empty & idle, consider stop + delete from hub (done externally)
-			// also a good place to trigger periodic persistence snapshots
-
-		case <-r.stop:
-			// Close all clients gracefully
-			for _, c := range r.clients {
-				c.close(errors.New("room closed"))
-			}
-			return
-		}
-	}
 }
 
 type Client struct {

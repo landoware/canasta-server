@@ -8,15 +8,11 @@ import (
 	"time"
 
 	_ "github.com/joho/godotenv/autoload"
-
-	"canasta-server/internal/database"
 )
 
 type Server struct {
 	port int
 	hub  *Hub
-
-	db database.Service
 }
 
 func NewServer() *http.Server {
@@ -24,8 +20,6 @@ func NewServer() *http.Server {
 	NewServer := &Server{
 		port: port,
 		hub:  NewHub(),
-
-		db: database.New(),
 	}
 
 	// Declare Server config
