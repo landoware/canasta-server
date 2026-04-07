@@ -1,0 +1,11 @@
+services:
+  canasta-client:
+    image: canasta-client
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_WS_URL: $VITE_WS_URL
+    restart: unless-stopped
+    ports:
+      - "4000:8080"

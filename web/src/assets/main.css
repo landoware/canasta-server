@@ -1,0 +1,51 @@
+@import 'tailwindcss';
+
+@font-face {
+  font-family: RS-Quill;
+  font-style: normal;
+  src: url('./fonts/RuneScape-Quill.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: RS-Quill-Caps;
+  font-style: normal;
+  src: url('./fonts/RuneScape-Quill-Caps.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: RS-Quill-Light;
+  font-style: normal;
+  src: url('./fonts/RuneScape-Quill-8.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: RS-Light;
+  font-style: normal;
+  src: url('./fonts/RuneScape-Plain-11.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: RS;
+  font-style: normal;
+  src: url('./fonts/RuneScape-Plain-12.ttf') format('truetype');
+}
+
+@font-face {
+  font-family: RS-Bold;
+  font-style: normal;
+  font-weight: 700;
+  src: url('./fonts/RuneScape-Bold-12.ttf') format('truetype');
+}
+
+@theme {
+  --font-quill: 'RS-Quill', serif;
+  --font-quill-caps: 'RS-Quill-Caps', serif;
+  --font-rs: 'RS', sans-serif;
+  --font-rs-light: 'RS-Light', sans-serif;
+  --font-rs-bold: 'RS-Bold', sans-serif;
+  --color-rs-yellow: #ffff00;
+  --color-card-table: #00512C;
+  --color-card-blue: #0163a8;
+  --color-card-red: #a23d31;
+  --color-card-white: #ffffff;
+}
