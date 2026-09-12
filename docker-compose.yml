@@ -7,3 +7,10 @@ services:
     restart: unless-stopped
     ports:
       - "8080:8080"
+    environment:
+      # CLIENT_URL is a plain runtime env var (not a build arg), so the
+      # same image works for any environment — set it in a local .env file
+      # or the shell before `docker compose up`. On the staging host this
+      # should be https://staging.landanfagan.com (origin only, no path).
+      # Left unset for local use, CORS falls back to allowing any origin.
+      CLIENT_URL: ${CLIENT_URL:-}

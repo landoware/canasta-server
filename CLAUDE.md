@@ -26,13 +26,19 @@ make docker-run / docker-down
 ```
 
 `make dev` runs `generate-types` (via `tygo`) before starting the server —
-this is aspirational for the not-yet-existing client repo; there's no
-`tygo.yaml` in this repo yet, so `generate-types` currently has nothing to
-generate from. Ignore it unless you're specifically wiring that up.
+this generates `canasta-client/src/types/{canasta,protocol}.ts` directly
+into the sibling client repo (see `tygo.yaml`), so it assumes that repo is
+checked out alongside this one.
 
 Env vars (read via `github.com/joho/godotenv/autoload`, so a `.env` file
-works): `PORT` (default 8080), `CLIENT_URL` (the allowed CORS/websocket
-origin; leave unset for local dev, which allows any origin).
+works): `PORT` (default 8080), `CLIENT_URL` (the one allowed CORS/websocket
+origin — scheme + host only, no path). Each deployment is single-origin,
+not shared: unset locally (CORS falls back to allowing any origin — see
+`withCORS` in `internal/server/server.go`), `https://staging.landanfagan.com`
+on the self-hosted staging box (set at container runtime, e.g. via
+`docker-compose.yml`'s `CLIENT_URL` passthrough — staging isn't on Fly),
+`https://landanfagan.com` in production (committed directly in `fly.toml`'s
+`[env]` block, since it isn't a secret).
 
 ## Architecture
 

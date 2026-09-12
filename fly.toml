@@ -8,6 +8,12 @@ primary_region = 'ord'
 
 [build]
 
+[env]
+  # The production client's origin (scheme + host only, no path) — CORS
+  # and the websocket origin check both key off this. Not a secret, so
+  # it's committed here rather than set via `fly secrets`.
+  CLIENT_URL = 'https://landanfagan.com'
+
 [http_service]
 internal_port = 8080
 force_https = true

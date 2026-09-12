@@ -54,6 +54,12 @@ func (s *Server) withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s.allowedOrigin != "" {
 			w.Header().Set("Access-Control-Allow-Origin", s.allowedOrigin)
+		} else {
+			// No CLIENT_URL configured: allow any origin. Intended for
+			// local development only (see New's doc comment); staging and
+			// production must always set CLIENT_URL to their one real
+			// client origin.
+			w.Header().Set("Access-Control-Allow-Origin", "*")
 		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
