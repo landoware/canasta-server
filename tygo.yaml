@@ -1,0 +1,23 @@
+type_mappings:
+  json.RawMessage: "unknown"
+
+packages:
+  # enum_style is deliberately left at the default ("const"): tygo's
+  # "enum"/"union" modes derive the generated name from the constants'
+  # common NAME PREFIX, not from the declared Go type — e.g. MessageType's
+  # constants are named TypeDrawFromDeck/TypePickUpDiscardPile/etc. (not
+  # MessageTypeDrawFromDeck/...), so "enum" mode would rename the
+  # generated type to just "Type". "const" mode emits one named export
+  # const per value using the real Go type name and has no such gotcha.
+  - path: "canasta-server/internal/canasta"
+    output_path: "../canasta-client/src/types/canasta.ts"
+    fallback_type: "unknown"
+
+  - path: "canasta-server/internal/protocol"
+    output_path: "../canasta-client/src/types/protocol.ts"
+    fallback_type: "unknown"
+    type_mappings:
+      canasta.ClientState: "ClientState"
+      canasta.TurnPhase: "TurnPhase"
+    frontmatter: |
+      import type { ClientState, TurnPhase } from "./canasta";

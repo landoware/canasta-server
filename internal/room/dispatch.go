@@ -18,7 +18,7 @@ var errInvalidPayload = errors.New("INVALID_PAYLOAD: could not parse command pay
 // absent from this map (currently none besides join and
 // grant_permission_to_go_out, which are handled separately) run in either
 // phase.
-var phaseForType = map[string]canasta.TurnPhase{
+var phaseForType = map[protocol.MessageType]canasta.TurnPhase{
 	protocol.TypeDrawFromDeck:      canasta.PhaseDrawing,
 	protocol.TypePickUpDiscardPile: canasta.PhaseDrawing,
 	protocol.TypePlayRedThree:      canasta.PhaseDrawing,
@@ -30,7 +30,7 @@ var phaseForType = map[string]canasta.TurnPhase{
 	protocol.TypePickUpFoot:        canasta.PhasePlaying,
 }
 
-var mutators = map[string]mutator{
+var mutators = map[protocol.MessageType]mutator{
 	protocol.TypeDrawFromDeck: func(g *canasta.Game, p *canasta.Player, data json.RawMessage) error {
 		if exhausted := g.DrawFromDeck(p); exhausted {
 			g.EndHand()
@@ -100,7 +100,7 @@ func (r *Room) applyCommand(seatIdx int, msg protocol.ClientMessage) *protocol.E
 
 	fn, ok := mutators[msg.Type]
 	if !ok {
-		return &protocol.ErrorPayload{Code: string(protocol.ErrUnknownType), Message: "unknown command: " + msg.Type}
+		return &protocol.ErrorPayload{Code: string(protocol.ErrUnknownType), Message: "unknown command: " + string(msg.Type)}
 	}
 
 	if seatIdx != r.game.CurrentPlayer {

@@ -5,19 +5,24 @@ package protocol
 
 import "encoding/json"
 
+// MessageType identifies what kind of envelope a ClientMessage/ServerMessage
+// carries. A named type (rather than a bare string) lets these values be
+// generated as a real TypeScript enum by tygo.
+type MessageType string
+
 // ClientMessage is the envelope for every message a client sends.
 type ClientMessage struct {
-	Type string          `json:"type"`
+	Type MessageType     `json:"type"`
 	Data json.RawMessage `json:"data"`
 }
 
 // ServerMessage is the envelope for every message sent to a client.
 type ServerMessage struct {
-	Type string `json:"type"`
-	Data any    `json:"data"`
+	Type MessageType `json:"type"`
+	Data any         `json:"data"`
 }
 
-func NewServerMessage(msgType string, data any) ServerMessage {
+func NewServerMessage(msgType MessageType, data any) ServerMessage {
 	return ServerMessage{Type: msgType, Data: data}
 }
 
@@ -26,28 +31,35 @@ func NewServerMessage(msgType string, data any) ServerMessage {
 // connection time (see internal/room.Room.Join), not via an in-band
 // message.
 const (
-	TypeDrawFromDeck           = "draw_from_deck"
-	TypePickUpDiscardPile      = "pick_up_discard_pile"
-	TypeNewMeld                = "new_meld"
-	TypeAddToMeld              = "add_to_meld"
-	TypeBurnCards              = "burn_cards"
-	TypeGoDown                 = "go_down"
-	TypeDiscard                = "discard"
-	TypePickUpFoot             = "pick_up_foot"
-	TypePlayRedThree           = "play_red_three"
-	TypeGrantPermissionToGoOut = "grant_permission_to_go_out"
+	TypeDrawFromDeck           MessageType = "draw_from_deck"
+	TypePickUpDiscardPile      MessageType = "pick_up_discard_pile"
+	TypeNewMeld                MessageType = "new_meld"
+	TypeAddToMeld              MessageType = "add_to_meld"
+	TypeBurnCards              MessageType = "burn_cards"
+	TypeGoDown                 MessageType = "go_down"
+	TypeDiscard                MessageType = "discard"
+	TypePickUpFoot             MessageType = "pick_up_foot"
+	TypePlayRedThree           MessageType = "play_red_three"
+	TypeGrantPermissionToGoOut MessageType = "grant_permission_to_go_out"
 )
 
 // Server -> client message types.
 const (
-	TypeWelcome            = "welcome"
-	TypeState              = "state"
-	TypePlayersLobby       = "players_lobby"
-	TypePlayerDisconnected = "player_disconnected"
-	TypePlayerReconnected  = "player_reconnected"
-	TypePlayerStatus       = "player_status"
-	TypeError              = "error"
+	TypeWelcome            MessageType = "welcome"
+	TypeState              MessageType = "state"
+	TypePlayersLobby       MessageType = "players_lobby"
+	TypePlayerDisconnected MessageType = "player_disconnected"
+	TypePlayerReconnected  MessageType = "player_reconnected"
+	TypePlayerStatus       MessageType = "player_status"
+	TypeError              MessageType = "error"
 )
+
+// CreateRoomResponse is the body of a successful POST /rooms. It's the
+// only HTTP (non-websocket) wire type, but lives here rather than in
+// internal/server so all wire types stay in one place for tygo.
+type CreateRoomResponse struct {
+	RoomCode string `json:"roomCode"`
+}
 
 // PickUpDiscardPilePayload claims the discard pile by forming a new meld
 // from the player's own cards plus the top discard card.

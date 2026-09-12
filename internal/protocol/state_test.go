@@ -24,7 +24,7 @@ func TestNewStateMessage(t *testing.T) {
 	if msg.CurrentPlayer != 2 {
 		t.Errorf("expected CurrentPlayer 2, got %d", msg.CurrentPlayer)
 	}
-	if msg.Phase != string(canasta.PhaseDrawing) {
+	if msg.Phase != canasta.PhaseDrawing {
 		t.Errorf("expected phase %q, got %q", canasta.PhaseDrawing, msg.Phase)
 	}
 	if msg.Name != g.Players[2].Name {

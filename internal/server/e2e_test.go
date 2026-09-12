@@ -40,7 +40,7 @@ func dialSeat(t *testing.T, wsURL, code, name string) *testClient {
 	return &testClient{t: t, conn: c}
 }
 
-func (c *testClient) send(msgType string, payload any) {
+func (c *testClient) send(msgType protocol.MessageType, payload any) {
 	c.t.Helper()
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -79,7 +79,7 @@ func (c *testClient) recv() protocol.ServerMessage {
 // recvUntil reads (and discards) messages until one of the given type
 // arrives, so tests can skip incidental broadcasts (e.g. lobby updates)
 // while waiting for the one they care about.
-func (c *testClient) recvUntil(msgType string) protocol.ServerMessage {
+func (c *testClient) recvUntil(msgType protocol.MessageType) protocol.ServerMessage {
 	c.t.Helper()
 	for range 20 {
 		msg := c.recv()

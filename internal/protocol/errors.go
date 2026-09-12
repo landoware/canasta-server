@@ -6,16 +6,17 @@ import "strings"
 type ErrorCode string
 
 const (
-	// Server-native codes, produced outside internal/canasta.
+	// Server-native codes, produced outside internal/canasta. Note:
+	// there's no code here for a bad room code, a missing/blank name, or a
+	// full room — those are all rejected as plain HTTP errors before a
+	// websocket connection (and thus any ErrorPayload) can exist at all;
+	// see internal/server/ws_handler.go.
 	ErrNotYourTurn    ErrorCode = "NOT_YOUR_TURN"
 	ErrWrongPhase     ErrorCode = "WRONG_PHASE"
 	ErrNotPartner     ErrorCode = "NOT_PARTNER"
-	ErrRoomNotFound   ErrorCode = "ROOM_NOT_FOUND"
-	ErrInvalidToken   ErrorCode = "INVALID_TOKEN"
 	ErrRoomNotPlaying ErrorCode = "ROOM_NOT_PLAYING"
 	ErrUnknownType    ErrorCode = "UNKNOWN_MESSAGE_TYPE"
 	ErrInvalidPayload ErrorCode = "INVALID_PAYLOAD"
-	ErrSeatTaken      ErrorCode = "SEAT_TAKEN"
 
 	// Fallback for any internal/canasta error that doesn't follow the
 	// "CODE: message" convention.

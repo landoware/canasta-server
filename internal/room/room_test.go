@@ -67,7 +67,7 @@ func (f *fakeConn) messages(t *testing.T) []protocol.ServerMessage {
 }
 
 // last returns the most recently written message of the given type.
-func (f *fakeConn) last(t *testing.T, msgType string) (protocol.ServerMessage, bool) {
+func (f *fakeConn) last(t *testing.T, msgType protocol.MessageType) (protocol.ServerMessage, bool) {
 	t.Helper()
 	msgs := f.messages(t)
 	for i := len(msgs) - 1; i >= 0; i-- {
@@ -139,7 +139,7 @@ func joinAll(t *testing.T, r *Room, names [4]string) [4]*fakeConn {
 	return conns
 }
 
-func cmd(t *testing.T, msgType string, payload any) protocol.ClientMessage {
+func cmd(t *testing.T, msgType protocol.MessageType, payload any) protocol.ClientMessage {
 	t.Helper()
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -224,7 +224,7 @@ func TestLobbyStartsGameOnFourthJoin(t *testing.T) {
 		if s.Name != [4]string{"Alice", "Bob", "Carol", "Dave"}[i] {
 			t.Errorf("seat %d: expected player name to match seat order, got %q", i, s.Name)
 		}
-		if s.Phase != string(phaseDrawingForTest) {
+		if s.Phase != phaseDrawingForTest {
 			t.Errorf("seat %d: expected drawing phase at hand start, got %q", i, s.Phase)
 		}
 	}
@@ -381,7 +381,7 @@ func TestDisconnectThenAwayStatus(t *testing.T) {
 	}
 }
 
-func mustLast(t *testing.T, c *fakeConn, msgType string) protocol.ServerMessage {
+func mustLast(t *testing.T, c *fakeConn, msgType protocol.MessageType) protocol.ServerMessage {
 	t.Helper()
 	msg, ok := c.last(t, msgType)
 	if !ok {

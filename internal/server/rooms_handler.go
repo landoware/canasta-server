@@ -3,11 +3,9 @@ package server
 import (
 	"encoding/json"
 	"net/http"
-)
 
-type createRoomResponse struct {
-	RoomCode string `json:"roomCode"`
-}
+	"canasta-server/internal/protocol"
+)
 
 // handleCreateRoom creates a new room in the Lobby state and returns its
 // code — the only thing players need to share with each other. Each
@@ -19,5 +17,5 @@ func (s *Server) handleCreateRoom(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	_ = json.NewEncoder(w).Encode(createRoomResponse{RoomCode: rm.Code})
+	_ = json.NewEncoder(w).Encode(protocol.CreateRoomResponse{RoomCode: rm.Code})
 }

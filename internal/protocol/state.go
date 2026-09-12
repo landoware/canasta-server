@@ -8,15 +8,15 @@ import "canasta-server/internal/canasta"
 // canasta.ClientState itself) keeps internal/canasta free of transport
 // concerns while ClientState stays reusable on its own.
 type StateMessage struct {
-	canasta.ClientState
-	SeatIndex     int    `json:"seatIndex"`
-	CurrentPlayer int    `json:"currentPlayer"`
-	IsYourTurn    bool   `json:"isYourTurn"`
-	Phase         string `json:"phase"`
-	HandNumber    int    `json:"handNumber"`
-	GameOver      bool   `json:"gameOver"`
-	Winner        string `json:"winner,omitempty"`
-	CanGoOut      bool   `json:"canGoOut"`
+	canasta.ClientState `tstype:",extends"`
+	SeatIndex           int               `json:"seatIndex"`
+	CurrentPlayer       int               `json:"currentPlayer"`
+	IsYourTurn          bool              `json:"isYourTurn"`
+	Phase               canasta.TurnPhase `json:"phase"`
+	HandNumber          int               `json:"handNumber"`
+	GameOver            bool              `json:"gameOver"`
+	Winner              string            `json:"winner,omitempty"`
+	CanGoOut            bool              `json:"canGoOut"`
 }
 
 // NewStateMessage builds the full broadcast payload for one seat.
@@ -28,7 +28,7 @@ func NewStateMessage(g *canasta.Game, seatIndex int) StateMessage {
 		SeatIndex:     seatIndex,
 		CurrentPlayer: g.CurrentPlayer,
 		IsYourTurn:    g.CurrentPlayer == seatIndex,
-		Phase:         string(g.Phase),
+		Phase:         g.Phase,
 		HandNumber:    g.HandNumber,
 		GameOver:      g.GameOver,
 		Winner:        g.Winner,
