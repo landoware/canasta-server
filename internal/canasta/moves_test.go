@@ -9,6 +9,14 @@ func TestDraw(t *testing.T) {
 	g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
 	p := g.Players[0]
 
+	// Fix the deck contents so no random shuffle result can put a red
+	// three among the drawn cards and throw off the count assertions.
+	g.Hand.Deck.Cards = []canasta.Card{
+		{0, canasta.Clubs, canasta.Four},
+		{1, canasta.Clubs, canasta.Five},
+		{2, canasta.Clubs, canasta.Six},
+	}
+
 	startingHandLength := len(p.Hand)
 	startingDeckLength := g.Hand.Deck.Count()
 
@@ -29,10 +37,17 @@ func TestDrawRedThree(t *testing.T) {
 	g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
 	p := g.Players[0]
 
+	// Fix the entire deck: top card drawn is a red three, the second
+	// card drawn and its replacement are both known non-red-threes, so
+	// the outcome doesn't depend on the game's shuffle at all.
+	g.Hand.Deck.Cards = []canasta.Card{
+		{0, canasta.Clubs, canasta.Four},
+		{1, canasta.Clubs, canasta.Five},
+		{2, canasta.Hearts, canasta.Three},
+	}
+
 	startingHandLength := len(p.Hand)
 	startingDeckLength := g.Hand.Deck.Count()
-
-	g.Hand.Deck.Cards[startingDeckLength-1] = canasta.Card{startingDeckLength, canasta.Hearts, canasta.Three}
 
 	g.DrawFromDeck(p)
 
