@@ -5,13 +5,11 @@ all: build test
 
 build:
 	@echo "Building..."
-	
-	
-	@CGO_ENABLED=1 GOOS=linux go build -o main cmd/api/main.go
+	@go build -o main ./cmd/api
 
 # Run the application
 run:
-	@go run cmd/api/main.go
+	@go run ./cmd/api
 # Create DB container
 docker-run:
 	@if docker compose up --build 2>/dev/null; then \
@@ -64,6 +62,6 @@ generate-types:
 
 # Development workflow with type generation
 dev: generate-types
-	@go run cmd/api/main.go
+	@go run ./cmd/api
 
 .PHONY: all build run test clean watch generate-types dev
