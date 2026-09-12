@@ -15,6 +15,8 @@ type Game struct {
 	HandNumber    int       `json:"handNumber"`
 	CurrentPlayer int       `json:"currentPlayer"`
 	Phase         TurnPhase `json:"phase"`
+	GameOver      bool      `json:"gameOver"`
+	Winner        string    `json:"winner,omitempty"`
 }
 
 type TurnPhase string
@@ -110,7 +112,7 @@ func findIndex[T HasId](id int, slice []T) (index int, err error) {
 			return i, nil
 		}
 	}
-	return -1, errors.New("Not found")
+	return -1, errors.New("NOT_FOUND: No item with the given id was found")
 }
 
 type GameConfig struct {
@@ -227,6 +229,7 @@ func (g *Game) EndHand() {
 
 	if g.HandNumber >= 4 {
 		g.EndGame()
+		return
 	}
 
 	g.NewHand()
@@ -258,6 +261,7 @@ func (g *Game) NewHand() {
 
 	hand.Deck.Shuffle()
 
+	g.Hand = hand
 	g.Deal()
 }
 
@@ -289,15 +293,25 @@ func (g *Game) Score() {
 	}
 }
 
-func (g Game) EndGame() {
+func (g *Game) EndGame() {
+	g.GameOver = true
 
+	switch {
+	case g.TeamA.Score > g.TeamB.Score:
+		g.Winner = "teamA"
+	case g.TeamB.Score > g.TeamA.Score:
+		g.Winner = "teamB"
+	default:
+		g.Winner = "tie"
+	}
 }
 
 func (g *Game) Deal() {
 	// Deal the Hand
 	for range 15 {
 		for _, player := range g.Players {
-			card := g.Hand.Deck.Draw(1)[0]
+			cards, _ := g.Hand.Deck.Draw(1)
+			card := cards[0]
 			player.Hand[card.GetId()] = card
 		}
 	}
@@ -305,13 +319,14 @@ func (g *Game) Deal() {
 	// Deal the Feet
 	for range 11 {
 		for _, player := range g.Players {
-			card := g.Hand.Deck.Draw(1)[0]
+			cards, _ := g.Hand.Deck.Draw(1)
+			card := cards[0]
 			player.Foot = append(player.Foot, card)
 		}
 	}
 	// Discard the top card
-	discard := g.Hand.Deck.Draw(1)[0]
-	g.Hand.DiscardPile = append(g.Hand.DiscardPile, discard)
+	discardCards, _ := g.Hand.Deck.Draw(1)
+	g.Hand.DiscardPile = append(g.Hand.DiscardPile, discardCards[0])
 
 	// Initialize the turn
 	g.CurrentPlayer = (-1 + g.HandNumber) % 4

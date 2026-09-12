@@ -6,8 +6,8 @@ import (
 	"slices"
 )
 
-func (g *Game) DrawFromDeck(p *Player) {
-	cards := g.Hand.Deck.Draw(2)
+func (g *Game) DrawFromDeck(p *Player) (exhausted bool) {
+	cards, exhausted := g.Hand.Deck.Draw(2)
 
 	// Keep drawing replacement cards for red threes
 	for slices.ContainsFunc(cards, func(c Card) bool {
@@ -20,7 +20,8 @@ func (g *Game) DrawFromDeck(p *Player) {
 				// Add red three to team's collection
 				p.Team.RedThrees = append(p.Team.RedThrees, card)
 				// Draw a replacement card
-				remainingCards = append(remainingCards, g.Hand.Deck.Draw(1)...)
+				replacement, _ := g.Hand.Deck.Draw(1)
+				remainingCards = append(remainingCards, replacement...)
 			} else {
 				remainingCards = append(remainingCards, card)
 			}
@@ -34,6 +35,7 @@ func (g *Game) DrawFromDeck(p *Player) {
 	}
 
 	g.Phase = PhasePlaying
+	return exhausted
 }
 
 func (g *Game) PickUpDiscardPile(p *Player, cardIds []int) error {
@@ -68,7 +70,7 @@ func (g *Game) PickUpDiscardPile(p *Player, cardIds []int) error {
 		score += topCard.Value()
 
 		if score < pointsRequired {
-			return fmt.Errorf("Cannot go down with fewer than %d points. You have %d points between your staging melds and the new meld.", pointsRequired, score)
+			return fmt.Errorf("GO_DOWN_REQUIREMENT_NOT_MET: Cannot go down with fewer than %d points. You have %d points between your staging melds and the new meld.", pointsRequired, score)
 		}
 	}
 
@@ -131,19 +133,19 @@ func (g *Game) AddToMeld(p *Player, cardIds []int, meldId int) error {
 	for _, cardId := range cardIds {
 		card := p.Hand[cardId]
 		if card.Rank != meld.Rank && !card.IsWild() {
-			return errors.New("Card does not match this meld")
+			return errors.New("MELD_MISMATCH: Card does not match this meld")
 		}
 		if card.Rank == Three {
-			return errors.New("Cannot use threes in melds")
+			return errors.New("MELD_MISMATCH: Cannot use threes in melds")
 		}
 		if meld.Rank == Seven && card.IsWild() {
-			return errors.New("Cannot use wildcards in a Sevens meld")
+			return errors.New("MELD_MISMATCH: Cannot use wildcards in a Sevens meld")
 		}
 
 		if card.IsWild() {
 			meld.WildCount++
 			if meld.WildCount > 3 {
-				return errors.New("Cannot add more wildcards to this Meld")
+				return errors.New("MELD_MISMATCH: Cannot add more wildcards to this Meld")
 			}
 		}
 		cards = append(cards, p.Hand[cardId])
@@ -168,23 +170,23 @@ func (g *Game) BurnCards(p *Player, cardIds []int, canastaId int) error {
 	for _, cardId := range cardIds {
 		card := p.Hand[cardId]
 		if card.IsWild() && p.Team.Canastas[canastaIndex].Natural {
-			return errors.New("Cannot make a natural canasta unnatural")
+			return errors.New("MELD_MISMATCH: Cannot make a natural canasta unnatural")
 		}
 		if card.Rank != p.Team.Canastas[canastaIndex].Rank && !card.IsWild() {
-			return errors.New("Card does not match this meld")
+			return errors.New("MELD_MISMATCH: Card does not match this meld")
 		}
 		if p.Team.Canastas[canastaIndex].Rank == Three {
-			return errors.New("Cannot use threes in melds")
+			return errors.New("MELD_MISMATCH: Cannot use threes in melds")
 		}
 		if p.Team.Canastas[canastaIndex].Rank == Seven && card.IsWild() {
-			return errors.New("Cannot use wildcards in a Sevens meld")
+			return errors.New("MELD_MISMATCH: Cannot use wildcards in a Sevens meld")
 		}
 
 		wildcards := WildCount(p.Team.Canastas[canastaIndex].Cards)
 		if card.IsWild() {
 			wildcards++
 			if wildcards > 3 {
-				return errors.New("Cannot add more wildcards to this Meld")
+				return errors.New("MELD_MISMATCH: Cannot add more wildcards to this Meld")
 			}
 		}
 
@@ -203,7 +205,7 @@ func (g *Game) GoDown(p *Player) error {
 		score += meld.Score()
 	}
 	if score < pointsRequired {
-		return fmt.Errorf("Cannot go down with fewer than %d points. You have played %d points.", pointsRequired, score)
+		return fmt.Errorf("GO_DOWN_REQUIREMENT_NOT_MET: Cannot go down with fewer than %d points. You have played %d points.", pointsRequired, score)
 	}
 
 	p.Team.GoneDown = true
@@ -228,6 +230,16 @@ func (g *Game) GoDown(p *Player) error {
 	}
 	p.StagingMelds = []Meld{}
 
+	return nil
+}
+
+// GrantPermissionToGoOut lets a player's partner authorize them to discard
+// their entire hand and end the round early.
+func (g *Game) GrantPermissionToGoOut(partner *Player) error {
+	if !partner.Team.GoneDown {
+		return errors.New("CANNOT_GO_OUT: Team must go down before granting permission to go out")
+	}
+	partner.Team.CanGoOut = true
 	return nil
 }
 
@@ -305,7 +317,7 @@ func (g *Game) PlayRedThree(p *Player, cardIds []int, fromFoot bool) error {
 	// Draw replacement cards ONLY if from initial hand, NOT from foot
 	// Why: Standard Canasta rules - foot red threes don't get replacements
 	if !fromFoot {
-		replacementCards := g.Hand.Deck.Draw(len(cardIds))
+		replacementCards, _ := g.Hand.Deck.Draw(len(cardIds))
 		for _, card := range replacementCards {
 			p.Hand[card.GetId()] = card
 		}
@@ -319,7 +331,7 @@ func (g *Game) PlayRedThree(p *Player, cardIds []int, fromFoot bool) error {
 
 func (p *Player) ValidateMeld(cardIds []int) (meld Meld, err error) {
 	if len(cardIds) < 3 {
-		return meld, errors.New("Melds require at least three cards.")
+		return meld, errors.New("INVALID_MELD: Melds require at least three cards.")
 	}
 
 	// Get the cards themselves without affecting the player's hand yet.
@@ -333,7 +345,7 @@ func (p *Player) ValidateMeld(cardIds []int) (meld Meld, err error) {
 
 		// Can't use a three for a canasta
 		if card.Rank == Three {
-			return meld, errors.New("Cannot use threes in melds")
+			return meld, errors.New("INVALID_MELD: Cannot use threes in melds")
 		}
 
 		// Set the rank based on the first non-wild
@@ -343,7 +355,7 @@ func (p *Player) ValidateMeld(cardIds []int) (meld Meld, err error) {
 				allWilds = false
 			} else {
 				if card.Rank != rank {
-					return meld, errors.New("Cannot mix rank in a meld")
+					return meld, errors.New("INVALID_MELD: Cannot mix rank in a meld")
 				}
 			}
 		}
@@ -354,12 +366,12 @@ func (p *Player) ValidateMeld(cardIds []int) (meld Meld, err error) {
 	wildCount := WildCount(cards)
 	// Can't mix wilds with sevens
 	if rank == Seven && wildCount > 0 {
-		return meld, errors.New("Cannot use wildcards for a sevens meld")
+		return meld, errors.New("INVALID_MELD: Cannot use wildcards for a sevens meld")
 	}
 
 	// Can't have majority wildcards
 	if !allWilds && wildCount > 3 {
-		return meld, errors.New("Cannot use more than three wildcards in an unnatural meld")
+		return meld, errors.New("INVALID_MELD: Cannot use more than three wildcards in an unnatural meld")
 	}
 
 	if allWilds {

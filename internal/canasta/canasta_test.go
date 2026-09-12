@@ -841,3 +841,73 @@ func TestGameScore(t *testing.T) {
 		})
 	}
 }
+
+func TestNewHandReplacesDeck(t *testing.T) {
+	g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+	g.NewHand()
+
+	// A hand deals 15+11 cards to 4 players plus a discard = 105 cards,
+	// leaving 216-105 = 111 in the deck.
+	if g.Hand.Deck.Count() != 111 {
+		t.Errorf("Expected a freshly dealt deck to have 111 cards left, got %d", g.Hand.Deck.Count())
+	}
+
+	// Drain the deck to simulate a hand that has been played for a while.
+	g.Hand.Deck.Draw(111)
+	if g.Hand.Deck.Count() != 0 {
+		t.Fatalf("Expected deck to be empty after draining, got %d", g.Hand.Deck.Count())
+	}
+
+	// NewHand must build and assign a fresh deck, or the next Deal would
+	// panic drawing from an exhausted deck.
+	g.NewHand()
+
+	if g.Hand.Deck.Count() != 111 {
+		t.Errorf("Expected NewHand to deal from a fresh deck, got %d cards left", g.Hand.Deck.Count())
+	}
+}
+
+func TestEndGame(t *testing.T) {
+	tests := []struct {
+		name           string
+		teamAScore     int
+		teamBScore     int
+		expectedWinner string
+	}{
+		{name: "team A wins", teamAScore: 5000, teamBScore: 3000, expectedWinner: "teamA"},
+		{name: "team B wins", teamAScore: 1000, teamBScore: 4000, expectedWinner: "teamB"},
+		{name: "tie", teamAScore: 2000, teamBScore: 2000, expectedWinner: "tie"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+			g.TeamA.Score = tt.teamAScore
+			g.TeamB.Score = tt.teamBScore
+
+			g.EndGame()
+
+			if !g.GameOver {
+				t.Error("Expected GameOver to be set to true")
+			}
+			if g.Winner != tt.expectedWinner {
+				t.Errorf("Expected winner %q, got %q", tt.expectedWinner, g.Winner)
+			}
+		})
+	}
+}
+
+func TestEndHandStopsAfterFourHands(t *testing.T) {
+	g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+	g.NewHand()
+	g.HandNumber = 3
+
+	g.EndHand()
+
+	if !g.GameOver {
+		t.Error("Expected game to be over after the fourth hand ends")
+	}
+	if g.HandNumber != 4 {
+		t.Errorf("Expected HandNumber to be 4, got %d", g.HandNumber)
+	}
+}

@@ -41,12 +41,16 @@ func TestBuildDeck(t *testing.T) {
 
 func TestDrawDeckMethod(t *testing.T) {
 	deck := canasta.NewDeck()
-	drawnCards := deck.Draw(3)
+	drawnCards, exhausted := deck.Draw(3)
 
 	expected := []canasta.Card{
 		{215, canasta.Wild, canasta.Joker},
 		{214, canasta.Wild, canasta.Joker},
 		{213, canasta.Spades, canasta.Ace},
+	}
+
+	if exhausted {
+		t.Errorf("Deck should not be exhausted after drawing 3 of 216 cards")
 	}
 
 	if deck.Count() != 213 {
@@ -58,6 +62,32 @@ func TestDrawDeckMethod(t *testing.T) {
 			t.Log(drawnCards)
 			t.Errorf("Expected to draw %d: %s, got %d: %s", expectedCard.Id, expectedCard, drawnCards[i].Id, drawnCards[i])
 		}
+	}
+}
+
+func TestDrawDeckExhaustion(t *testing.T) {
+	deck := canasta.NewDeck()
+
+	cards, exhausted := deck.Draw(300)
+
+	if len(cards) != 216 {
+		t.Errorf("Expected to draw all %d remaining cards, got %d", 216, len(cards))
+	}
+
+	if !exhausted {
+		t.Error("Deck should report exhausted after draining it completely")
+	}
+
+	if deck.Count() != 0 {
+		t.Errorf("Deck should have 0 cards left, %d given", deck.Count())
+	}
+
+	moreCards, stillExhausted := deck.Draw(1)
+	if len(moreCards) != 0 {
+		t.Errorf("Drawing from an empty deck should return no cards, got %d", len(moreCards))
+	}
+	if !stillExhausted {
+		t.Error("Drawing from an already-empty deck should still report exhausted")
 	}
 }
 

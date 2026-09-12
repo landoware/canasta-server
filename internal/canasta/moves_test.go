@@ -1128,6 +1128,37 @@ func TestPickupFoot(t *testing.T) {
 	}
 }
 
+func TestGrantPermissionToGoOut(t *testing.T) {
+	t.Run("team has not gone down", func(t *testing.T) {
+		g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+		player := g.Players[0]
+
+		err := g.GrantPermissionToGoOut(player)
+
+		if err == nil {
+			t.Error("Expected an error when team has not gone down")
+		}
+		if player.Team.CanGoOut {
+			t.Error("CanGoOut should not have been set")
+		}
+	})
+
+	t.Run("team has gone down", func(t *testing.T) {
+		g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+		player := g.Players[0]
+		player.Team.GoneDown = true
+
+		err := g.GrantPermissionToGoOut(player)
+
+		if err != nil {
+			t.Error(err)
+		}
+		if !player.Team.CanGoOut {
+			t.Error("Expected CanGoOut to be set to true")
+		}
+	})
+}
+
 func TestDiscard(t *testing.T) {
 	tests := []struct {
 		name          string

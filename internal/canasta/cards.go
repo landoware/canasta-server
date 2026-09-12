@@ -155,13 +155,16 @@ func (deck Deck) Count() int {
 	return len(deck.Cards)
 }
 
-func (deck *Deck) Draw(i int) (Cards []Card) {
+func (deck *Deck) Draw(i int) (cards []Card, exhausted bool) {
+	if i > len(deck.Cards) {
+		i = len(deck.Cards)
+	}
 	for range i {
 		card := deck.Cards[len(deck.Cards)-1]
-		Cards = append(Cards, card)
+		cards = append(cards, card)
 		deck.Cards = deck.Cards[:len(deck.Cards)-1]
 	}
-	return
+	return cards, len(deck.Cards) == 0
 }
 
 func (d *Deck) Shuffle() {
