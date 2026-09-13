@@ -9,13 +9,18 @@ type ClientState struct {
 	HasFoot        bool               `json:"hasFoot"`
 	Players        []OtherPlayerState `json:"players"`
 	OurScore       int                `json:"ourScore"`
-	OurMelds       []Meld             `json:"ourMelds"`
-	OurCanastas    []Canasta          `json:"ourCanastas"`
-	OurRedThrees   []Card             `json:"ourRedThrees"`
-	OtherScore     int                `json:"otherScore"`
-	OtherMelds     []Meld             `json:"otherMelds"`
-	OtherCanastas  []Canasta          `json:"otherCanastas"`
-	OtherRedThrees []Card             `json:"otherRedThrees"`
+	// GoneDown tells the client whether OurMelds is the team's official
+	// melds (true) or the requesting player's own not-yet-committed
+	// staging melds (false) — see NewMeld/GoDown in moves.go. There's no
+	// per-meld distinction: OurMelds is always entirely one or the other.
+	GoneDown       bool      `json:"goneDown"`
+	OurMelds       []Meld    `json:"ourMelds"`
+	OurCanastas    []Canasta `json:"ourCanastas"`
+	OurRedThrees   []Card    `json:"ourRedThrees"`
+	OtherScore     int       `json:"otherScore"`
+	OtherMelds     []Meld    `json:"otherMelds"`
+	OtherCanastas  []Canasta `json:"otherCanastas"`
+	OtherRedThrees []Card    `json:"otherRedThrees"`
 }
 
 type OtherPlayerState struct {
@@ -58,6 +63,7 @@ func (g *Game) GetClientState(playerID int) *ClientState {
 		HasFoot:        len(player.Foot) != 0,
 		Players:        otherStates,
 		OurScore:       player.Team.Score,
+		GoneDown:       player.Team.GoneDown,
 		OurMelds:       melds,
 		OurCanastas:    player.Team.Canastas,
 		OurRedThrees:   player.Team.RedThrees,
