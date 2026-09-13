@@ -75,9 +75,19 @@ func (g *Game) GetClientState(playerID int) *ClientState {
 }
 
 func GetOtherPlayerState(p *Player) OtherPlayerState {
+	// Cards moved into a staging meld are removed from p.Hand immediately
+	// (see NewMeld/AddToMeld in moves.go), even though the meld isn't real
+	// until the player's team goes down. Counting them back in keeps a
+	// staging meld invisible to opponents/teammates via hand count — it
+	// stays hidden the same way the staging meld's contents already are.
+	handLength := len(p.Hand)
+	for _, meld := range p.StagingMelds {
+		handLength += len(meld.Cards)
+	}
+
 	return OtherPlayerState{
 		Name:       p.Name,
-		HandLength: len(p.Hand),
+		HandLength: handLength,
 		HasFoot:    len(p.Foot) != 0,
 	}
 }

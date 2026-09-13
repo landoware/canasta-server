@@ -12,6 +12,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"canasta-server/internal/canasta"
 	"canasta-server/internal/protocol"
 	"canasta-server/internal/room"
 	"canasta-server/internal/server"
@@ -164,8 +165,14 @@ func TestFourPlayerGameEndToEnd(t *testing.T) {
 			t.Fatalf("turn %d: expected playing phase after draw, got %q", turn, latest[current].Phase)
 		}
 
+		// Any card except a red three (Discard now rejects those — see
+		// PlayRedThree for how those actually leave a hand).
 		var cardID int
-		for id := range latest[current].Hand {
+		for id, card := range latest[current].Hand {
+			isRedThree := card.Rank == canasta.Three && (card.Suit == canasta.Hearts || card.Suit == canasta.Diamonds)
+			if isRedThree {
+				continue
+			}
 			cardID = id
 			break
 		}

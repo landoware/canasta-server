@@ -31,6 +31,35 @@ func TestOtherStatesMatch(t *testing.T) {
 func TestStagingMeldsAreShown(t *testing.T) {
 }
 
+func TestOtherPlayerStateHidesStagingMeld(t *testing.T) {
+	assert := assert.New(t)
+
+	game := canasta.NewGame("ABCD", []string{"A", "B", "C", "D"}, canasta.WithFixedTeamOrder())
+	game.NewHand()
+
+	player := game.Players[0]
+	before := canasta.GetOtherPlayerState(player)
+
+	// Move a card out of hand and into a staging meld, exactly as
+	// NewMeld/AddToMeld do — before the player's team has gone down, this
+	// must not visibly shrink the hand count opponents/teammates see.
+	var moved canasta.Card
+	for id, card := range player.Hand {
+		moved = card
+		delete(player.Hand, id)
+		break
+	}
+	player.StagingMelds = append(player.StagingMelds, canasta.Meld{
+		Id:    0,
+		Rank:  moved.Rank,
+		Cards: []canasta.Card{moved},
+	})
+
+	after := canasta.GetOtherPlayerState(player)
+
+	assert.Equal(before.HandLength, after.HandLength)
+}
+
 func TestMovesChangeState(t *testing.T) {
 	assert := assert.New(t)
 

@@ -157,7 +157,9 @@ func (g *Game) AddToMeld(p *Player, cardIds []int, meldId int) error {
 
 		if card.IsWild() {
 			meld.WildCount++
-			if meld.WildCount > 3 {
+			// An all-wild meld has no wildcard cap, same as ValidateMeld's
+			// "allWilds" allowance when the meld is first created.
+			if meld.Rank != Wild && meld.WildCount > 3 {
 				return errors.New("MELD_MISMATCH: Cannot add more wildcards to this Meld")
 			}
 		}
@@ -268,6 +270,12 @@ func (g *Game) Discard(p *Player, cardId int) error {
 	}
 
 	card := p.Hand[cardId]
+	// A red three is never a real discard candidate — it's always played
+	// via PlayRedThree instead (see there), immediately or at the start
+	// of a later turn.
+	if card.Rank == Three && !card.Suit.isBlack() {
+		return errors.New("INVALID_CARD: Cannot discard a red three")
+	}
 	p.Hand.removeCards([]int{cardId})
 	g.Hand.DiscardPile = append(g.Hand.DiscardPile, card)
 
@@ -417,6 +425,12 @@ func (p *Player) NewCanasta(meldIndex int) {
 	}
 
 	p.Team.Canastas = append(p.Team.Canastas, Canasta{
+		// Carries over the meld's own id (unique — see ValidateMeld, which
+		// sets it to its first card's id) rather than leaving it unset:
+		// a completed canasta is the same "thing" the meld was, just
+		// finished, and the client needs a stable, distinct id per
+		// canasta (e.g. to track which one it's interacting with).
+		Id:      meld.Id,
 		Rank:    meld.Rank,
 		Cards:   meld.Cards,
 		Count:   len(meld.Cards),

@@ -518,6 +518,72 @@ func TestAddToMeldCreatesACanasta(t *testing.T) {
 	}
 }
 
+func TestNewCanastaGetsAUniqueId(t *testing.T) {
+	// Regression test: NewCanasta used to leave Canasta.Id unset (always
+	// 0), so a team with more than one canasta couldn't tell them apart
+	// client-side — e.g. clicking to expand one canasta would show
+	// another's cards, since every canasta shared the same id.
+	game := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+
+	hand := canasta.PlayerHand{
+		0: {0, canasta.Hearts, canasta.Queen},
+		1: {1, canasta.Hearts, canasta.King},
+	}
+
+	player := game.Players[0]
+	player.Hand = hand
+	player.Team.Melds = append(player.Team.Melds,
+		canasta.Meld{
+			Id:   100,
+			Rank: canasta.Queen,
+			Cards: []canasta.Card{
+				{10, canasta.Hearts, canasta.Queen},
+				{11, canasta.Spades, canasta.Queen},
+				{12, canasta.Spades, canasta.Queen},
+				{13, canasta.Diamonds, canasta.Queen},
+				{14, canasta.Diamonds, canasta.Queen},
+				{15, canasta.Diamonds, canasta.Queen},
+			},
+		},
+		canasta.Meld{
+			Id:   200,
+			Rank: canasta.King,
+			Cards: []canasta.Card{
+				{20, canasta.Hearts, canasta.King},
+				{21, canasta.Spades, canasta.King},
+				{22, canasta.Spades, canasta.King},
+				{23, canasta.Diamonds, canasta.King},
+				{24, canasta.Diamonds, canasta.King},
+				{25, canasta.Diamonds, canasta.King},
+			},
+		},
+	)
+
+	// Complete the Queens meld into a canasta first, then the Kings —
+	// mirrors a team finishing two canastas over the course of a game.
+	if err := game.AddToMeld(player, []int{0}, 100); err != nil {
+		t.Fatal(err)
+	}
+	if err := game.AddToMeld(player, []int{1}, 200); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(player.Team.Canastas) != 2 {
+		t.Fatalf("expected 2 canastas, got %d", len(player.Team.Canastas))
+	}
+
+	queensCanasta, kingsCanasta := player.Team.Canastas[0], player.Team.Canastas[1]
+	if queensCanasta.Id != 100 {
+		t.Errorf("expected the Queens canasta to keep its meld's id 100, got %d", queensCanasta.Id)
+	}
+	if kingsCanasta.Id != 200 {
+		t.Errorf("expected the Kings canasta to keep its meld's id 200, got %d", kingsCanasta.Id)
+	}
+	if queensCanasta.Id == kingsCanasta.Id {
+		t.Error("two different canastas must not share an id")
+	}
+}
+
 func TestAddToMeldOnStagingMeld(t *testing.T) {
 	game := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
 
@@ -588,6 +654,43 @@ func TestAddToMeldOnStagingMeldDoesNotAutoCanasta(t *testing.T) {
 
 	if len(player.Team.Canastas) != 0 {
 		t.Error("A staging meld should never become a canasta before going down")
+	}
+}
+
+func TestAddToMeldOnAllWildMeldHasNoWildcardCap(t *testing.T) {
+	game := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+
+	hand := canasta.PlayerHand{
+		3: {3, canasta.Wild, canasta.Joker},
+	}
+
+	player := game.Players[0]
+	player.Hand = hand
+	player.Team.Melds = append(player.Team.Melds, canasta.Meld{
+		Id:        0,
+		Rank:      canasta.Wild,
+		WildCount: 3,
+		Cards: []canasta.Card{
+			{0, canasta.Hearts, canasta.Two},
+			{1, canasta.Spades, canasta.Two},
+			{2, canasta.Wild, canasta.Joker},
+		},
+	})
+
+	// Already at the normal 3-wildcard cap — an all-wild meld should still
+	// accept a 4th, unlike a mixed-rank meld (see TestAddToMeld's
+	// "unnatural" cases, which do enforce that cap).
+	err := game.AddToMeld(player, []int{3}, player.Team.Melds[0].Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if player.Team.Melds[0].WildCount != 4 {
+		t.Errorf("expected WildCount 4, got %d", player.Team.Melds[0].WildCount)
+	}
+
+	if len(player.Team.Melds[0].Cards) != 4 {
+		t.Error("Meld should have the new card")
 	}
 }
 
@@ -1281,6 +1384,25 @@ func TestDiscard(t *testing.T) {
 			},
 			discardedCard: 1,
 			canGoOut:      false,
+			valid:         false,
+		},
+		{
+			name: "cannot discard a red three",
+			hand: []canasta.Card{
+				{0, canasta.Clubs, canasta.Ace},
+				{1, canasta.Hearts, canasta.Three},
+			},
+			discardedCard: 1,
+			canGoOut:      false,
+			valid:         false,
+		},
+		{
+			name: "cannot discard a red three even with permission to go out",
+			hand: []canasta.Card{
+				{1, canasta.Diamonds, canasta.Three},
+			},
+			discardedCard: 1,
+			canGoOut:      true,
 			valid:         false,
 		},
 	}
