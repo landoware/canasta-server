@@ -123,12 +123,25 @@ func (g *Game) NewMeld(p *Player, cardIds []int) error {
 func (g *Game) AddToMeld(p *Player, cardIds []int, meldId int) error {
 	var cards []Card
 
+	// A meld being added to may be either an official team meld (post-go-down)
+	// or one of the player's own not-yet-committed staging melds — try the
+	// official melds first since that's the common case once a team is down.
+	official := true
 	meldIndex, err := findIndex(meldId, p.Team.Melds)
 	if err != nil {
-		return err
+		official = false
+		meldIndex, err = findIndex(meldId, p.StagingMelds)
+		if err != nil {
+			return err
+		}
 	}
 
-	meld := &p.Team.Melds[meldIndex]
+	var meld *Meld
+	if official {
+		meld = &p.Team.Melds[meldIndex]
+	} else {
+		meld = &p.StagingMelds[meldIndex]
+	}
 
 	for _, cardId := range cardIds {
 		card := p.Hand[cardId]
@@ -154,7 +167,9 @@ func (g *Game) AddToMeld(p *Player, cardIds []int, meldId int) error {
 	meld.Cards = append(meld.Cards, cards...)
 	p.Hand.removeCards(cardIds)
 
-	if len(meld.Cards) >= 7 {
+	// A staging meld only ever becomes a canasta at GoDown time (see the
+	// "7+ cards in a staging meld" handling there), never while still staged.
+	if official && len(meld.Cards) >= 7 {
 		p.NewCanasta(meldIndex)
 	}
 

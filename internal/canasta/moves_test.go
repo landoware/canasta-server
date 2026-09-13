@@ -518,6 +518,79 @@ func TestAddToMeldCreatesACanasta(t *testing.T) {
 	}
 }
 
+func TestAddToMeldOnStagingMeld(t *testing.T) {
+	game := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+
+	hand := canasta.PlayerHand{
+		3: {3, canasta.Hearts, canasta.Queen},
+	}
+
+	player := game.Players[0]
+	player.Hand = hand
+	player.StagingMelds = append(player.StagingMelds, canasta.Meld{
+		Id:   0,
+		Rank: canasta.Queen,
+		Cards: []canasta.Card{
+			{0, canasta.Hearts, canasta.Queen},
+			{1, canasta.Spades, canasta.Queen},
+			{2, canasta.Diamonds, canasta.Queen},
+		},
+	})
+
+	err := game.AddToMeld(player, []int{3}, player.StagingMelds[0].Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(player.StagingMelds[0].Cards) != 4 {
+		t.Error("Staging meld should have the new card")
+	}
+
+	if len(player.Hand) != 0 {
+		t.Error("Player's hand did not have the card removed")
+	}
+
+	if len(player.Team.Melds) != 0 {
+		t.Error("Adding to a staging meld should not touch the team's official melds")
+	}
+}
+
+func TestAddToMeldOnStagingMeldDoesNotAutoCanasta(t *testing.T) {
+	game := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+
+	hand := canasta.PlayerHand{
+		6: {6, canasta.Hearts, canasta.Queen},
+	}
+
+	player := game.Players[0]
+	player.Hand = hand
+	player.StagingMelds = append(player.StagingMelds, canasta.Meld{
+		Id:   0,
+		Rank: canasta.Queen,
+		Cards: []canasta.Card{
+			{0, canasta.Hearts, canasta.Queen},
+			{1, canasta.Spades, canasta.Queen},
+			{2, canasta.Diamonds, canasta.Queen},
+			{3, canasta.Hearts, canasta.Queen},
+			{4, canasta.Spades, canasta.Queen},
+			{5, canasta.Diamonds, canasta.Queen},
+		},
+	})
+
+	err := game.AddToMeld(player, []int{6}, player.StagingMelds[0].Id)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(player.StagingMelds[0].Cards) != 7 {
+		t.Error("Staging meld should have the new card")
+	}
+
+	if len(player.Team.Canastas) != 0 {
+		t.Error("A staging meld should never become a canasta before going down")
+	}
+}
+
 func TestAddSevenCardsToMeld(t *testing.T) {
 	tests := []struct {
 		name  string
