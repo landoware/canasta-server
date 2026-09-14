@@ -300,6 +300,14 @@ func (g *Game) PickUpFoot(p *Player) error {
 	if p.CanastaMadeThisTurn {
 		return errors.New("CANASTA_THIS_TURN: Cannot pick up foot until after discarding the turn your first canasta was made")
 	}
+	// Free to pick up on any other player's turn (see dispatch.go, which
+	// exempts this command from the usual "must be your turn" check).
+	// On your own turn, only before you've drawn — once you're in the
+	// playing phase you have to wait until you discard (ending your
+	// turn) to pick it up.
+	if g.Players[g.CurrentPlayer] == p && g.Phase == PhasePlaying {
+		return errors.New("WRONG_PHASE: Cannot pick up your foot after drawing on your own turn — wait until you discard")
+	}
 
 	for _, card := range p.Foot {
 		p.Hand[card.GetId()] = card

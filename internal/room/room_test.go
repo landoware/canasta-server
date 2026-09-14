@@ -254,6 +254,33 @@ func TestNotYourTurnRejected(t *testing.T) {
 	}
 }
 
+func TestPickUpFootBypassesTurnOrder(t *testing.T) {
+	r := startRoom(t)
+	conns := joinAll(t, r, [4]string{"Alice", "Bob", "Carol", "Dave"})
+
+	state := decodeData[protocol.StateMessage](t, mustLast(t, conns[0], protocol.TypeState))
+	nonCurrent := (state.CurrentPlayer + 1) % 4
+
+	r.Submit(nonCurrent, cmd(t, protocol.TypePickUpFoot, struct{}{}))
+	drain(r)
+
+	// pick_up_foot is exempt from the generic "must be your turn" check
+	// (see dispatch.go's turnAndPhaseExempt) — a fresh game still
+	// rejects it, but for a *game* reason (no canasta made yet), not
+	// ErrNotYourTurn, proving the exemption actually took effect.
+	errMsg, ok := conns[nonCurrent].last(t, protocol.TypeError)
+	if !ok {
+		t.Fatal("expected an error message (no canasta made yet)")
+	}
+	e := decodeData[protocol.ErrorPayload](t, errMsg)
+	if e.Code == string(protocol.ErrNotYourTurn) {
+		t.Error("pick_up_foot should not be rejected for being out of turn")
+	}
+	if e.Code != "NO_CANASTA" {
+		t.Errorf("expected code NO_CANASTA, got %s", e.Code)
+	}
+}
+
 func TestWrongPhaseRejected(t *testing.T) {
 	r := startRoom(t)
 	conns := joinAll(t, r, [4]string{"Alice", "Bob", "Carol", "Dave"})

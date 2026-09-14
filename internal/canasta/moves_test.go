@@ -1377,6 +1377,59 @@ func TestPickUpFootBlockedUntilDiscardOnFirstCanastaTurn(t *testing.T) {
 	}
 }
 
+func TestPickUpFootTurnTiming(t *testing.T) {
+	// Every case starts from the same eligible-to-pick-up baseline
+	// (MadeCanasta true, CanastaMadeThisTurn false, still has a foot —
+	// Deal() already dealt one) and only varies CurrentPlayer/Phase.
+	setup := func() (canasta.Game, *canasta.Player) {
+		g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+		g.Deal()
+		p := g.Players[0]
+		p.MadeCanasta = true
+		return g, p
+	}
+
+	t.Run("succeeds on another player's turn, even mid-play", func(t *testing.T) {
+		g, p := setup()
+		g.CurrentPlayer = 1 // not p's seat
+		g.Phase = canasta.PhasePlaying
+
+		if err := g.PickUpFoot(p); err != nil {
+			t.Errorf("expected pickup to succeed on another player's turn: %v", err)
+		}
+		if len(p.Foot) != 0 {
+			t.Error("expected the foot to have been picked up")
+		}
+	})
+
+	t.Run("succeeds on the player's own turn before they've drawn", func(t *testing.T) {
+		g, p := setup()
+		g.CurrentPlayer = 0 // p's own seat
+		g.Phase = canasta.PhaseDrawing
+
+		if err := g.PickUpFoot(p); err != nil {
+			t.Errorf("expected pickup to succeed before drawing: %v", err)
+		}
+		if len(p.Foot) != 0 {
+			t.Error("expected the foot to have been picked up")
+		}
+	})
+
+	t.Run("fails on the player's own turn after they've drawn", func(t *testing.T) {
+		g, p := setup()
+		g.CurrentPlayer = 0 // p's own seat
+		g.Phase = canasta.PhasePlaying
+		startingFootLen := len(p.Foot)
+
+		if err := g.PickUpFoot(p); err == nil {
+			t.Error("expected pickup to be blocked after drawing on your own turn")
+		}
+		if len(p.Foot) != startingFootLen {
+			t.Error("should not have touched the foot")
+		}
+	})
+}
+
 func TestGrantPermissionToGoOut(t *testing.T) {
 	t.Run("team has not gone down", func(t *testing.T) {
 		g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})

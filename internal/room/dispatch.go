@@ -27,7 +27,15 @@ var phaseForType = map[protocol.MessageType]canasta.TurnPhase{
 	protocol.TypeBurnCards:         canasta.PhasePlaying,
 	protocol.TypeGoDown:            canasta.PhasePlaying,
 	protocol.TypeDiscard:           canasta.PhasePlaying,
-	protocol.TypePickUpFoot:        canasta.PhasePlaying,
+}
+
+// turnAndPhaseExempt lists commands that skip the generic turn-order and
+// phase checks in applyCommand below because they have their own
+// tailored logic instead — see PickUpFoot in moves.go, which allows
+// picking up your foot on any other player's turn, but only before
+// you've drawn (or after you've discarded) on your own.
+var turnAndPhaseExempt = map[protocol.MessageType]bool{
+	protocol.TypePickUpFoot: true,
 }
 
 var mutators = map[protocol.MessageType]mutator{
@@ -103,12 +111,14 @@ func (r *Room) applyCommand(seatIdx int, msg protocol.ClientMessage) *protocol.E
 		return &protocol.ErrorPayload{Code: string(protocol.ErrUnknownType), Message: "unknown command: " + string(msg.Type)}
 	}
 
-	if seatIdx != r.game.CurrentPlayer {
-		return &protocol.ErrorPayload{Code: string(protocol.ErrNotYourTurn), Message: "it is not your turn"}
-	}
+	if !turnAndPhaseExempt[msg.Type] {
+		if seatIdx != r.game.CurrentPlayer {
+			return &protocol.ErrorPayload{Code: string(protocol.ErrNotYourTurn), Message: "it is not your turn"}
+		}
 
-	if requiredPhase, ok := phaseForType[msg.Type]; ok && r.game.Phase != requiredPhase {
-		return &protocol.ErrorPayload{Code: string(protocol.ErrWrongPhase), Message: "wrong phase for this action"}
+		if requiredPhase, ok := phaseForType[msg.Type]; ok && r.game.Phase != requiredPhase {
+			return &protocol.ErrorPayload{Code: string(protocol.ErrWrongPhase), Message: "wrong phase for this action"}
+		}
 	}
 
 	player := r.game.Players[seatIdx]
