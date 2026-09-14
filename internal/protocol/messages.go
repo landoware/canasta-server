@@ -41,6 +41,7 @@ const (
 	TypePickUpFoot             MessageType = "pick_up_foot"
 	TypePlayRedThree           MessageType = "play_red_three"
 	TypeGrantPermissionToGoOut MessageType = "grant_permission_to_go_out"
+	TypeAskToGoOut             MessageType = "ask_to_go_out"
 )
 
 // Server -> client message types.
@@ -51,6 +52,7 @@ const (
 	TypePlayerDisconnected MessageType = "player_disconnected"
 	TypePlayerReconnected  MessageType = "player_reconnected"
 	TypePlayerStatus       MessageType = "player_status"
+	TypeGoOutRequested     MessageType = "go_out_requested"
 	TypeError              MessageType = "error"
 )
 
@@ -95,8 +97,15 @@ type PlayRedThreePayload struct {
 	FromFoot bool  `json:"fromFoot"`
 }
 
-// draw_from_deck, go_down, pick_up_foot, and grant_permission_to_go_out
-// take no payload beyond the envelope.
+// draw_from_deck, go_down, pick_up_foot, grant_permission_to_go_out, and
+// ask_to_go_out take no payload beyond the envelope.
+
+// GoOutRequestedPayload notifies exactly one seat — the asker's
+// partner — that their partner wants to go out. See applyAskToGoOut in
+// internal/room/dispatch.go.
+type GoOutRequestedPayload struct {
+	AskerName string `json:"askerName"`
+}
 
 // WelcomePayload is sent immediately after a successful join/reconnect.
 type WelcomePayload struct {

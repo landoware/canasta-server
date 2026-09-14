@@ -427,6 +427,133 @@ func TestGrantPermissionRequiresPartner(t *testing.T) {
 	}
 }
 
+// stageGoOutEligibleTeam marks seatIdx's team as gone down with all four
+// canasta types MeetsGoOutRequirements checks for — must run on the
+// actor goroutine (see the r.submit(func(){...}) callers below), since
+// only it may ever touch r.game.
+func stageGoOutEligibleTeam(g *canasta.Game, seatIdx int) {
+	team := g.Players[seatIdx].Team
+	team.GoneDown = true
+	team.Canastas = []canasta.Canasta{
+		{Id: 1, Rank: canasta.Four, Natural: true, Cards: make([]canasta.Card, 7)},
+		{Id: 2, Rank: canasta.Five, Natural: false, Cards: make([]canasta.Card, 7)},
+		{Id: 3, Rank: canasta.Seven, Natural: true, Cards: make([]canasta.Card, 7)},
+		{Id: 4, Rank: canasta.Wild, Natural: false, Cards: make([]canasta.Card, 7)},
+	}
+}
+
+func TestAskToGoOutRejectedBeforeGoingDown(t *testing.T) {
+	r := startRoom(t)
+	conns := joinAll(t, r, [4]string{"Alice", "Bob", "Carol", "Dave"})
+
+	r.Submit(0, cmd(t, protocol.TypeAskToGoOut, struct{}{}))
+	drain(r)
+
+	errMsg, ok := conns[0].last(t, protocol.TypeError)
+	if !ok {
+		t.Fatal("expected an error before the team has gone down")
+	}
+	e := decodeData[protocol.ErrorPayload](t, errMsg)
+	if e.Code != "CANNOT_GO_OUT" {
+		t.Errorf("expected code CANNOT_GO_OUT, got %s", e.Code)
+	}
+}
+
+func TestAskToGoOutRejectedMissingCanastaType(t *testing.T) {
+	r := startRoom(t)
+	conns := joinAll(t, r, [4]string{"Alice", "Bob", "Carol", "Dave"})
+
+	done := make(chan struct{})
+	r.submit(func() {
+		team := r.game.Players[0].Team
+		team.GoneDown = true
+		// Only three of the four required types.
+		team.Canastas = []canasta.Canasta{
+			{Id: 1, Rank: canasta.Four, Natural: true, Cards: make([]canasta.Card, 7)},
+			{Id: 2, Rank: canasta.Seven, Natural: true, Cards: make([]canasta.Card, 7)},
+			{Id: 3, Rank: canasta.Wild, Natural: false, Cards: make([]canasta.Card, 7)},
+		}
+		close(done)
+	})
+	<-done
+
+	r.Submit(0, cmd(t, protocol.TypeAskToGoOut, struct{}{}))
+	drain(r)
+
+	errMsg, ok := conns[0].last(t, protocol.TypeError)
+	if !ok {
+		t.Fatal("expected an error when a required canasta type is missing")
+	}
+	e := decodeData[protocol.ErrorPayload](t, errMsg)
+	if e.Code != "CANASTA_REQUIREMENTS_NOT_MET" {
+		t.Errorf("expected code CANASTA_REQUIREMENTS_NOT_MET, got %s", e.Code)
+	}
+}
+
+func TestAskToGoOutRejectedOnceAlreadyGranted(t *testing.T) {
+	r := startRoom(t)
+	conns := joinAll(t, r, [4]string{"Alice", "Bob", "Carol", "Dave"})
+
+	done := make(chan struct{})
+	r.submit(func() {
+		stageGoOutEligibleTeam(r.game, 0)
+		r.game.Players[0].Team.CanGoOut = true
+		close(done)
+	})
+	<-done
+
+	r.Submit(0, cmd(t, protocol.TypeAskToGoOut, struct{}{}))
+	drain(r)
+
+	errMsg, ok := conns[0].last(t, protocol.TypeError)
+	if !ok {
+		t.Fatal("expected an error when permission was already granted")
+	}
+	e := decodeData[protocol.ErrorPayload](t, errMsg)
+	if e.Code != "ALREADY_GRANTED" {
+		t.Errorf("expected code ALREADY_GRANTED, got %s", e.Code)
+	}
+}
+
+func TestAskToGoOutNotifiesOnlyThePartner(t *testing.T) {
+	r := startRoom(t)
+	conns := joinAll(t, r, [4]string{"Alice", "Bob", "Carol", "Dave"})
+
+	done := make(chan struct{})
+	r.submit(func() {
+		stageGoOutEligibleTeam(r.game, 0)
+		close(done)
+	})
+	<-done
+
+	// Not turn-restricted — asking works from any seat on the eligible
+	// team, whether or not it's currently their turn.
+	r.Submit(0, cmd(t, protocol.TypeAskToGoOut, struct{}{}))
+	drain(r)
+
+	if errMsg, ok := conns[0].last(t, protocol.TypeError); ok {
+		e := decodeData[protocol.ErrorPayload](t, errMsg)
+		t.Fatalf("expected the ask to succeed, got %s: %s", e.Code, e.Message)
+	}
+
+	// Seat 2 is (0+2)%4 — the asker's partner.
+	notifyMsg, ok := conns[2].last(t, protocol.TypeGoOutRequested)
+	if !ok {
+		t.Fatal("expected the partner to receive a go_out_requested notification")
+	}
+	payload := decodeData[protocol.GoOutRequestedPayload](t, notifyMsg)
+	if payload.AskerName != "Alice" {
+		t.Errorf("expected askerName %q, got %q", "Alice", payload.AskerName)
+	}
+
+	// Neither of the opposing team's seats should have been notified.
+	for _, seatIdx := range []int{1, 3} {
+		if _, ok := conns[seatIdx].last(t, protocol.TypeGoOutRequested); ok {
+			t.Errorf("seat %d should not have received a go_out_requested notification", seatIdx)
+		}
+	}
+}
+
 func TestDisconnectReconnectResumesSeat(t *testing.T) {
 	r := startRoom(t)
 	conns := joinAll(t, r, [4]string{"Alice", "Bob", "Carol", "Dave"})

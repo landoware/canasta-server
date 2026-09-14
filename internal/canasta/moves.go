@@ -256,6 +256,9 @@ func (g *Game) GrantPermissionToGoOut(partner *Player) error {
 	if !partner.Team.GoneDown {
 		return errors.New("CANNOT_GO_OUT: Team must go down before granting permission to go out")
 	}
+	if !partner.Team.MeetsGoOutRequirements() {
+		return errors.New("CANASTA_REQUIREMENTS_NOT_MET: Team needs a natural canasta, an unnatural canasta, a canasta of sevens, and a canasta of wildcards before going out")
+	}
 	partner.Team.CanGoOut = true
 	return nil
 }

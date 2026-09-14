@@ -105,6 +105,31 @@ type Team struct {
 	RedThrees []Card    `json:"RedThrees"`
 }
 
+// MeetsGoOutRequirements reports whether the team has completed all
+// four canasta types the Pierson house rules require before going out
+// can be attempted (see README.md's "Ending the Hand" section): a
+// natural canasta, an unnatural (mixed-wildcard) canasta, a canasta of
+// all sevens, and a canasta of all wildcards. These are strictly
+// distinct buckets, mirroring Canasta.Score()'s own partitioning above —
+// a sevens or wildcards canasta does not also satisfy the generic
+// natural/unnatural requirement.
+func (t *Team) MeetsGoOutRequirements() bool {
+	var hasNatural, hasUnnatural, hasSevens, hasWildcards bool
+	for _, c := range t.Canastas {
+		switch {
+		case c.Rank == Wild:
+			hasWildcards = true
+		case c.Rank == Seven:
+			hasSevens = true
+		case c.Natural:
+			hasNatural = true
+		default:
+			hasUnnatural = true
+		}
+	}
+	return hasNatural && hasUnnatural && hasSevens && hasWildcards
+}
+
 var meldRequirements = map[int]int{
 	1: 50,
 	2: 90,

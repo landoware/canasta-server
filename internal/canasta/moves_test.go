@@ -1445,10 +1445,65 @@ func TestGrantPermissionToGoOut(t *testing.T) {
 		}
 	})
 
-	t.Run("team has gone down", func(t *testing.T) {
+	t.Run("team has gone down but has no canastas yet", func(t *testing.T) {
 		g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
 		player := g.Players[0]
 		player.Team.GoneDown = true
+
+		err := g.GrantPermissionToGoOut(player)
+
+		if err == nil {
+			t.Error("expected an error when the team has no canastas at all")
+		}
+		if player.Team.CanGoOut {
+			t.Error("CanGoOut should not have been set")
+		}
+	})
+
+	// A natural or unnatural canasta at a regular rank, a sevens canasta,
+	// and a wildcards canasta — the four buckets MeetsGoOutRequirements
+	// checks. Missing any one of the four should still fail.
+	naturalCanasta := canasta.Canasta{Id: 1, Rank: canasta.Four, Cards: makeCards(1, canasta.Four, 7), Natural: true}
+	unnaturalCanasta := canasta.Canasta{Id: 2, Rank: canasta.Five, Cards: makeCards(101, canasta.Five, 7), Natural: false}
+	sevensCanasta := canasta.Canasta{Id: 3, Rank: canasta.Seven, Cards: makeCards(201, canasta.Seven, 7), Natural: true}
+	wildcardsCanasta := canasta.Canasta{Id: 4, Rank: canasta.Wild, Cards: makeCards(301, canasta.Two, 7), Natural: false}
+	allFour := []canasta.Canasta{naturalCanasta, unnaturalCanasta, sevensCanasta, wildcardsCanasta}
+
+	missingCases := []struct {
+		name     string
+		canastas []canasta.Canasta
+	}{
+		{"missing the natural canasta", []canasta.Canasta{unnaturalCanasta, sevensCanasta, wildcardsCanasta}},
+		{"missing the unnatural canasta", []canasta.Canasta{naturalCanasta, sevensCanasta, wildcardsCanasta}},
+		{"missing the sevens canasta", []canasta.Canasta{naturalCanasta, unnaturalCanasta, wildcardsCanasta}},
+		{"missing the wildcards canasta", []canasta.Canasta{naturalCanasta, unnaturalCanasta, sevensCanasta}},
+		// A sevens canasta is technically "natural" (zero wildcards) but
+		// must not double as satisfying the generic natural requirement.
+		{"two sevens canastas do not substitute for a natural one", []canasta.Canasta{sevensCanasta, unnaturalCanasta, wildcardsCanasta}},
+	}
+	for _, tt := range missingCases {
+		t.Run(tt.name, func(t *testing.T) {
+			g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+			player := g.Players[0]
+			player.Team.GoneDown = true
+			player.Team.Canastas = tt.canastas
+
+			err := g.GrantPermissionToGoOut(player)
+
+			if err == nil {
+				t.Error("expected an error when a required canasta type is missing")
+			}
+			if player.Team.CanGoOut {
+				t.Error("CanGoOut should not have been set")
+			}
+		})
+	}
+
+	t.Run("team has gone down with all four required canasta types", func(t *testing.T) {
+		g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+		player := g.Players[0]
+		player.Team.GoneDown = true
+		player.Team.Canastas = allFour
 
 		err := g.GrantPermissionToGoOut(player)
 
@@ -1459,6 +1514,17 @@ func TestGrantPermissionToGoOut(t *testing.T) {
 			t.Error("Expected CanGoOut to be set to true")
 		}
 	})
+}
+
+// makeCards builds n cards of the given rank starting at startId, cycling
+// through suits — good enough for tests that only care about rank/count.
+func makeCards(startId int, rank canasta.Rank, n int) []canasta.Card {
+	suits := []canasta.Suit{canasta.Hearts, canasta.Diamonds, canasta.Clubs, canasta.Spades}
+	cards := make([]canasta.Card, n)
+	for i := range n {
+		cards[i] = canasta.Card{Id: startId + i, Suit: suits[i%len(suits)], Rank: rank}
+	}
+	return cards
 }
 
 func TestDiscard(t *testing.T) {

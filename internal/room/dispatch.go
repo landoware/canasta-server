@@ -117,6 +117,9 @@ func (r *Room) applyCommand(seatIdx int, msg protocol.ClientMessage) *protocol.E
 	if msg.Type == protocol.TypeGrantPermissionToGoOut {
 		return r.applyGrantPermission(seatIdx)
 	}
+	if msg.Type == protocol.TypeAskToGoOut {
+		return r.applyAskToGoOut(seatIdx)
+	}
 
 	fn, ok := mutators[msg.Type]
 	if !ok {
@@ -161,5 +164,30 @@ func (r *Room) applyGrantPermission(seatIdx int) *protocol.ErrorPayload {
 		return &protocol.ErrorPayload{Code: string(code), Message: message}
 	}
 
+	return nil
+}
+
+// applyAskToGoOut lets any player on an eligible, not-yet-granted team
+// notify their partner that they'd like to go out — see
+// GrantPermissionToGoOut in moves.go for the authoritative check this
+// mirrors (the actual grant re-validates independently; this is just
+// the notification trigger, not a state mutation). Unlike every other
+// command, this isn't turn-scoped at all: Team.CanGoOut never resets
+// once granted, so there's no reason to require it be the asker's turn.
+func (r *Room) applyAskToGoOut(seatIdx int) *protocol.ErrorPayload {
+	team := r.game.Players[seatIdx].Team
+	if !team.GoneDown {
+		return &protocol.ErrorPayload{Code: "CANNOT_GO_OUT", Message: "team must go down before asking to go out"}
+	}
+	if !team.MeetsGoOutRequirements() {
+		return &protocol.ErrorPayload{Code: "CANASTA_REQUIREMENTS_NOT_MET", Message: "team needs a natural, unnatural, sevens, and wildcards canasta before going out"}
+	}
+	if team.CanGoOut {
+		return &protocol.ErrorPayload{Code: "ALREADY_GRANTED", Message: "permission to go out has already been granted"}
+	}
+
+	partnerSeat := (seatIdx + 2) % 4
+	askerName := r.game.Players[seatIdx].Name
+	r.sendTo(partnerSeat, protocol.NewServerMessage(protocol.TypeGoOutRequested, protocol.GoOutRequestedPayload{AskerName: askerName}))
 	return nil
 }
