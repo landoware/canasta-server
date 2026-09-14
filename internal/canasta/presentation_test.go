@@ -76,6 +76,19 @@ func TestClientStateReflectsMadeCanasta(t *testing.T) {
 	assert.False(g.GetClientState(2).MadeCanasta)
 }
 
+func TestClientStateReflectsCanastaMadeThisTurn(t *testing.T) {
+	assert := assert.New(t)
+
+	g := canasta.NewGame("ABCD", []string{"A", "B", "C", "D"}, canasta.WithFixedTeamOrder())
+	g.NewHand()
+
+	assert.False(g.GetClientState(0).CanastaMadeThisTurn)
+
+	g.Players[0].CanastaMadeThisTurn = true
+
+	assert.True(g.GetClientState(0).CanastaMadeThisTurn)
+}
+
 func TestMovesChangeState(t *testing.T) {
 	assert := assert.New(t)
 

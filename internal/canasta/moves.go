@@ -283,6 +283,7 @@ func (g *Game) Discard(p *Player, cardId int) error {
 		g.EndHand()
 	}
 
+	p.CanastaMadeThisTurn = false
 	g.Phase = PhaseDrawing
 	g.CurrentPlayer = (g.CurrentPlayer + 1) % 4
 	return nil
@@ -293,7 +294,12 @@ func (g *Game) PickUpFoot(p *Player) error {
 	if !p.MadeCanasta {
 		return errors.New("NO_CANASTA: Must complete a canasta before picking up foot")
 	}
-	// Cannot be your turn, or you need to be in draw phase
+	// Can't pick up the same turn your first canasta was made — only
+	// from the next turn onward, once you've discarded (see Discard,
+	// which clears this).
+	if p.CanastaMadeThisTurn {
+		return errors.New("CANASTA_THIS_TURN: Cannot pick up foot until after discarding the turn your first canasta was made")
+	}
 
 	for _, card := range p.Foot {
 		p.Hand[card.GetId()] = card
@@ -417,6 +423,12 @@ func (h *PlayerHand) removeCards(ids []int) {
 }
 
 func (p *Player) NewCanasta(meldIndex int) {
+	// Only the player's genuinely *first* canasta starts the
+	// same-turn foot-pickup block — a second one later this same turn
+	// shouldn't re-trigger it, since MadeCanasta is already true.
+	if !p.MadeCanasta {
+		p.CanastaMadeThisTurn = true
+	}
 
 	meld := p.Team.Melds[meldIndex]
 	natural := true

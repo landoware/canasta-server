@@ -1,19 +1,23 @@
 package canasta
 
 type ClientState struct {
-	DeckCount      int                `json:"deckCount"`
-	DiscardCount   int                `json:"discardCount"`
-	DiscardTopCard *Card              `json:"discardTopCard"` // Pointer so we can send nil when pile is empty
-	Name           string             `json:"name"`
-	Hand           PlayerHand         `json:"hand"`
-	HasFoot        bool               `json:"hasFoot"`
+	DeckCount      int        `json:"deckCount"`
+	DiscardCount   int        `json:"discardCount"`
+	DiscardTopCard *Card      `json:"discardTopCard"` // Pointer so we can send nil when pile is empty
+	Name           string     `json:"name"`
+	Hand           PlayerHand `json:"hand"`
+	HasFoot        bool       `json:"hasFoot"`
 	// Whether this player has completed their own first canasta yet —
 	// see PickUpFoot in moves.go, whose sole eligibility check this
 	// mirrors. Per-player, not per-team: a partner going down or making
 	// a canasta doesn't earn this player their own foot.
-	MadeCanasta    bool               `json:"madeCanasta"`
-	Players        []OtherPlayerState `json:"players"`
-	OurScore       int                `json:"ourScore"`
+	MadeCanasta bool `json:"madeCanasta"`
+	// True while this player is blocked from picking up their foot
+	// because they made their first canasta this same turn and haven't
+	// discarded yet — see PickUpFoot in moves.go.
+	CanastaMadeThisTurn bool               `json:"canastaMadeThisTurn"`
+	Players             []OtherPlayerState `json:"players"`
+	OurScore            int                `json:"ourScore"`
 	// GoneDown tells the client whether OurMelds is the team's official
 	// melds (true) or the requesting player's own not-yet-committed
 	// staging melds (false) — see NewMeld/GoDown in moves.go. There's no
@@ -60,23 +64,24 @@ func (g *Game) GetClientState(playerID int) *ClientState {
 	}
 
 	return &ClientState{
-		DeckCount:      g.Hand.Deck.Count(),
-		DiscardCount:   len(g.Hand.DiscardPile),
-		DiscardTopCard: topCard,
-		Name:           player.Name,
-		Hand:           player.Hand,
-		HasFoot:        len(player.Foot) != 0,
-		MadeCanasta:    player.MadeCanasta,
-		Players:        otherStates,
-		OurScore:       player.Team.Score,
-		GoneDown:       player.Team.GoneDown,
-		OurMelds:       melds,
-		OurCanastas:    player.Team.Canastas,
-		OurRedThrees:   player.Team.RedThrees,
-		OtherScore:     opposingTeam.Score,
-		OtherMelds:     opposingTeam.Melds,
-		OtherCanastas:  opposingTeam.Canastas,
-		OtherRedThrees: opposingTeam.RedThrees,
+		DeckCount:           g.Hand.Deck.Count(),
+		DiscardCount:        len(g.Hand.DiscardPile),
+		DiscardTopCard:      topCard,
+		Name:                player.Name,
+		Hand:                player.Hand,
+		HasFoot:             len(player.Foot) != 0,
+		MadeCanasta:         player.MadeCanasta,
+		CanastaMadeThisTurn: player.CanastaMadeThisTurn,
+		Players:             otherStates,
+		OurScore:            player.Team.Score,
+		GoneDown:            player.Team.GoneDown,
+		OurMelds:            melds,
+		OurCanastas:         player.Team.Canastas,
+		OurRedThrees:        player.Team.RedThrees,
+		OtherScore:          opposingTeam.Score,
+		OtherMelds:          opposingTeam.Melds,
+		OtherCanastas:       opposingTeam.Canastas,
+		OtherRedThrees:      opposingTeam.RedThrees,
 	}
 }
 

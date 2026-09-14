@@ -38,7 +38,13 @@ type Player struct {
 	Foot         []Card     `json:"foot"`
 	StagingMelds []Meld     `json:"stagingMelds"`
 	MadeCanasta  bool       `json:"madeCanasta"`
-	partner      *Player
+	// True from the moment a player completes their *first* canasta
+	// until they discard on that same turn — blocks PickUpFoot for
+	// that window (see moves.go). Cleared in Discard, so it's false
+	// again well before this player can act again (turn passes away
+	// from them at Discard).
+	CanastaMadeThisTurn bool `json:"canastaMadeThisTurn"`
+	partner             *Player
 }
 
 type PlayerHand map[int]Card
@@ -242,6 +248,7 @@ func (g *Game) NewHand() {
 		player.Foot = make([]Card, 0)
 		player.StagingMelds = make([]Meld, 0)
 		player.MadeCanasta = false
+		player.CanastaMadeThisTurn = false
 	}
 	// Clear out team melds and canastas
 	g.TeamA.Melds = make([]Meld, 0)

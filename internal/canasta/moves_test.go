@@ -1319,6 +1319,64 @@ func TestPickupFoot(t *testing.T) {
 	}
 }
 
+func TestPickUpFootBlockedUntilDiscardOnFirstCanastaTurn(t *testing.T) {
+	g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+	g.Deal()
+
+	p := g.Players[0]
+	p.Hand = canasta.PlayerHand{
+		900: {900, canasta.Clubs, canasta.Ace},
+		901: {901, canasta.Clubs, canasta.King},
+	}
+
+	sevenFours := make([]canasta.Card, 7)
+	for i := range sevenFours {
+		sevenFours[i] = canasta.Card{10 + i, canasta.Hearts, canasta.Four}
+	}
+	sevenFives := make([]canasta.Card, 7)
+	for i := range sevenFives {
+		sevenFives[i] = canasta.Card{20 + i, canasta.Hearts, canasta.Five}
+	}
+	p.Team.Melds = []canasta.Meld{
+		{Id: 100, Rank: canasta.Four, Cards: sevenFours},
+		{Id: 200, Rank: canasta.Five, Cards: sevenFives},
+	}
+
+	p.NewCanasta(0) // first canasta this turn
+	if !p.CanastaMadeThisTurn {
+		t.Fatal("expected CanastaMadeThisTurn to be true right after the first canasta")
+	}
+
+	// A second canasta later the same turn shouldn't clear the block —
+	// only completing the *first* one ever starts it, and only that
+	// turn's Discard ends it.
+	p.NewCanasta(0) // index 0 now points at the fives meld, the fours having been removed
+	if !p.CanastaMadeThisTurn {
+		t.Error("a second canasta the same turn should not clear the same-turn block")
+	}
+
+	if err := g.PickUpFoot(p); err == nil {
+		t.Error("expected PickUpFoot to be blocked on the turn the first canasta was made")
+	}
+	if len(p.Foot) == 0 {
+		t.Fatal("test setup: player should still have a foot to pick up")
+	}
+
+	if err := g.Discard(p, 900); err != nil {
+		t.Fatalf("unexpected error discarding: %v", err)
+	}
+	if p.CanastaMadeThisTurn {
+		t.Error("expected CanastaMadeThisTurn to be cleared after discarding")
+	}
+
+	if err := g.PickUpFoot(p); err != nil {
+		t.Errorf("expected PickUpFoot to succeed once discarded: %v", err)
+	}
+	if len(p.Foot) != 0 {
+		t.Error("expected the foot to have been picked up")
+	}
+}
+
 func TestGrantPermissionToGoOut(t *testing.T) {
 	t.Run("team has not gone down", func(t *testing.T) {
 		g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
