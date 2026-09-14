@@ -9,7 +9,7 @@ primary_region = 'dfw'
 [build]
 
 [env]
-CLIENT_URL = 'https://landanfagan.com'
+CLIENT_URL = 'https://canasta.landanfagan.com'
 
 [http_service]
 internal_port = 8080

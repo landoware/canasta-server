@@ -37,7 +37,7 @@ not shared: unset locally (CORS falls back to allowing any origin — see
 `withCORS` in `internal/server/server.go`), `https://staging.landanfagan.com`
 on the self-hosted staging box (set at container runtime, e.g. via
 `docker-compose.yml`'s `CLIENT_URL` passthrough — staging isn't on Fly),
-`https://landanfagan.com` in production (committed directly in `fly.toml`'s
+`https://canasta.landanfagan.com` in production (committed directly in `fly.toml`'s
 `[env]` block, since it isn't a secret).
 
 ## Architecture
