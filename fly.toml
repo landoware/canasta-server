@@ -1,4 +1,4 @@
-# fly.toml app configuration file generated for canasta-server on 2026-01-18T06:31:58-07:00
+# fly.toml app configuration file generated for canasta-server on 2026-09-14T10:38:52-06:00
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
@@ -7,19 +7,19 @@ app = 'canasta-server'
 primary_region = 'dfw'
 
 [build]
-
 [env]
-CLIENT_URL = 'https://canasta.landanfagan.com'
+  CLIENT_URL = 'https://canasta.landanfagan.com'
 
 [http_service]
-internal_port = 8080
-force_https = true
-auto_stop_machines = 'stop'
-auto_start_machines = true
-min_machines_running = 0
-processes = ['app']
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
 
 [[vm]]
-memory = '256mb'
-cpus = 1
-memory_mb = 256
+  memory = '256mb'
+  cpu_kind = 'shared'
+  cpus = 1
+  memory_mb = 256
