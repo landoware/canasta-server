@@ -7,6 +7,11 @@ type ClientState struct {
 	Name           string             `json:"name"`
 	Hand           PlayerHand         `json:"hand"`
 	HasFoot        bool               `json:"hasFoot"`
+	// Whether this player has completed their own first canasta yet —
+	// see PickUpFoot in moves.go, whose sole eligibility check this
+	// mirrors. Per-player, not per-team: a partner going down or making
+	// a canasta doesn't earn this player their own foot.
+	MadeCanasta    bool               `json:"madeCanasta"`
 	Players        []OtherPlayerState `json:"players"`
 	OurScore       int                `json:"ourScore"`
 	// GoneDown tells the client whether OurMelds is the team's official
@@ -61,6 +66,7 @@ func (g *Game) GetClientState(playerID int) *ClientState {
 		Name:           player.Name,
 		Hand:           player.Hand,
 		HasFoot:        len(player.Foot) != 0,
+		MadeCanasta:    player.MadeCanasta,
 		Players:        otherStates,
 		OurScore:       player.Team.Score,
 		GoneDown:       player.Team.GoneDown,

@@ -60,6 +60,22 @@ func TestOtherPlayerStateHidesStagingMeld(t *testing.T) {
 	assert.Equal(before.HandLength, after.HandLength)
 }
 
+func TestClientStateReflectsMadeCanasta(t *testing.T) {
+	assert := assert.New(t)
+
+	g := canasta.NewGame("ABCD", []string{"A", "B", "C", "D"}, canasta.WithFixedTeamOrder())
+	g.NewHand()
+
+	assert.False(g.GetClientState(0).MadeCanasta)
+
+	g.Players[0].MadeCanasta = true
+
+	assert.True(g.GetClientState(0).MadeCanasta)
+	// Per-player, not per-team — a partner having made a canasta doesn't
+	// earn this player their own foot pickup.
+	assert.False(g.GetClientState(2).MadeCanasta)
+}
+
 func TestMovesChangeState(t *testing.T) {
 	assert := assert.New(t)
 
