@@ -38,6 +38,18 @@ var turnAndPhaseExempt = map[protocol.MessageType]bool{
 	protocol.TypePickUpFoot: true,
 }
 
+// meldAllowedInDrawPhase lists commands that may also run during
+// PhaseDrawing (in addition to their normal PhasePlaying requirement in
+// phaseForType), but only for a player whose team hasn't gone down yet —
+// see NewMeld/AddToMeld in moves.go, which route to Player.StagingMelds
+// pre-go-down. This lets a player stage a meld before picking up the
+// discard pile, without loosening the phase rule for a player extending
+// their team's real, already-gone-down melds.
+var meldAllowedInDrawPhase = map[protocol.MessageType]bool{
+	protocol.TypeNewMeld:   true,
+	protocol.TypeAddToMeld: true,
+}
+
 var mutators = map[protocol.MessageType]mutator{
 	protocol.TypeDrawFromDeck: func(g *canasta.Game, p *canasta.Player, data json.RawMessage) error {
 		if exhausted := g.DrawFromDeck(p); exhausted {
@@ -117,7 +129,12 @@ func (r *Room) applyCommand(seatIdx int, msg protocol.ClientMessage) *protocol.E
 		}
 
 		if requiredPhase, ok := phaseForType[msg.Type]; ok && r.game.Phase != requiredPhase {
-			return &protocol.ErrorPayload{Code: string(protocol.ErrWrongPhase), Message: "wrong phase for this action"}
+			stagingExempt := meldAllowedInDrawPhase[msg.Type] &&
+				r.game.Phase == canasta.PhaseDrawing &&
+				!r.game.Players[seatIdx].Team.GoneDown
+			if !stagingExempt {
+				return &protocol.ErrorPayload{Code: string(protocol.ErrWrongPhase), Message: "wrong phase for this action"}
+			}
 		}
 	}
 

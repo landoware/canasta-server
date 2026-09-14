@@ -206,6 +206,80 @@ func TestFourPlayerGameEndToEnd(t *testing.T) {
 	}
 }
 
+// TestNewMeldAllowedDuringDrawPhaseOverSockets proves dispatch.go's
+// meldAllowedInDrawPhase carve-out actually takes effect over real
+// sockets, without depending on the random deal producing a genuinely
+// meldable hand: two arbitrary card ids are always too few to form a
+// valid meld (ValidateMeld requires 3+), so if the wrong-phase gate had
+// NOT been lifted for the draw phase, the rejection would be
+// ErrWrongPhase; once lifted, the rejection reason is the meld's own
+// (in)validity instead. The full positive-path scenario — staging a
+// meld pre-draw, then picking up the pile to go down in the same turn —
+// is already covered deterministically in internal/canasta/moves_test.go's
+// TestGoingDownByPickingUpThePile and internal/room/room_test.go's
+// TestMeldAllowedDuringDrawPhaseBeforeGoingDown, both of which can stage
+// a known, controlled hand; a real deal here can't guarantee one.
+func TestNewMeldAllowedDuringDrawPhaseOverSockets(t *testing.T) {
+	mgr := room.NewManager()
+	t.Cleanup(mgr.Close)
+
+	srv := server.New(mgr, "")
+	httpSrv := httptest.NewServer(srv.Routes())
+	t.Cleanup(httpSrv.Close)
+
+	resp, err := http.Post(httpSrv.URL+"/rooms", "application/json", nil)
+	if err != nil {
+		t.Fatalf("create room: %v", err)
+	}
+	var created struct {
+		RoomCode string `json:"roomCode"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&created); err != nil {
+		t.Fatalf("decode create-room response: %v", err)
+	}
+	resp.Body.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(httpSrv.URL, "http")
+	names := [4]string{"Alice", "Bob", "Carol", "Dave"}
+
+	clients := make([]*testClient, 4)
+	for i, name := range names {
+		c := dialSeat(t, wsURL, created.RoomCode, name)
+		clients[i] = c
+		c.recvUntil(protocol.TypeWelcome)
+	}
+
+	var latest [4]protocol.StateMessage
+	for i, c := range clients {
+		latest[i] = decode[protocol.StateMessage](t, c.recvUntil(protocol.TypeState))
+	}
+
+	current := latest[0].CurrentPlayer
+	actor := clients[current]
+	if latest[current].Phase != "drawing" {
+		t.Fatalf("expected a fresh hand to start in the drawing phase, got %q", latest[current].Phase)
+	}
+
+	// Card ids must come from the acting player's own hand — each
+	// client's state is redacted to its own perspective (see
+	// presentation.go's GetClientState), so this must be latest[current],
+	// not any other seat's.
+	var ids []int
+	for id := range latest[current].Hand {
+		ids = append(ids, id)
+		if len(ids) == 2 {
+			break
+		}
+	}
+
+	actor.send(protocol.TypeNewMeld, protocol.NewMeldPayload{CardIds: ids})
+	errMsg := actor.recvUntil(protocol.TypeError)
+	e := decode[protocol.ErrorPayload](t, errMsg)
+	if e.Code == string(protocol.ErrWrongPhase) {
+		t.Fatalf("expected NewMeld to be allowed during the draw phase pre-go-down, got %s: %s", e.Code, e.Message)
+	}
+}
+
 // TestJoinRejectionsUseHTTPStatusCodes verifies that a rejected join is
 // reported as a plain HTTP error before any websocket upgrade happens,
 // rather than a socket that opens and immediately closes.

@@ -9,6 +9,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"canasta-server/internal/canasta"
 	"canasta-server/internal/protocol"
 )
 
@@ -296,6 +297,80 @@ func TestWrongPhaseRejected(t *testing.T) {
 	errMsg, ok := conns[current].last(t, protocol.TypeError)
 	if !ok {
 		t.Fatal("expected an error message for a wrong-phase command")
+	}
+	e := decodeData[protocol.ErrorPayload](t, errMsg)
+	if e.Code != string(protocol.ErrWrongPhase) {
+		t.Errorf("expected code %s, got %s", protocol.ErrWrongPhase, e.Code)
+	}
+}
+
+func TestMeldAllowedDuringDrawPhaseBeforeGoingDown(t *testing.T) {
+	r := startRoom(t)
+	conns := joinAll(t, r, [4]string{"Alice", "Bob", "Carol", "Dave"})
+
+	state := decodeData[protocol.StateMessage](t, mustLast(t, conns[0], protocol.TypeState))
+	current := state.CurrentPlayer
+
+	// Give the current player three matching-rank cards to meld. This
+	// mutates r.game, so it must run on the actor goroutine — only it may
+	// ever touch game state (see this package's -race invariant) — the
+	// same way drain's own closure does.
+	done := make(chan struct{})
+	r.submit(func() {
+		p := r.game.Players[current]
+		p.Hand[9001] = canasta.Card{Id: 9001, Suit: canasta.Hearts, Rank: canasta.Four}
+		p.Hand[9002] = canasta.Card{Id: 9002, Suit: canasta.Diamonds, Rank: canasta.Four}
+		p.Hand[9003] = canasta.Card{Id: 9003, Suit: canasta.Clubs, Rank: canasta.Four}
+		close(done)
+	})
+	<-done
+
+	// The hand always starts in the drawing phase (see TestWrongPhaseRejected)
+	// — confirm NewMeld now succeeds there for a player who hasn't gone
+	// down, via dispatch.go's meldAllowedInDrawPhase carve-out.
+	r.Submit(current, cmd(t, protocol.TypeNewMeld, protocol.NewMeldPayload{CardIds: []int{9001, 9002, 9003}}))
+	drain(r)
+
+	if errMsg, ok := conns[current].last(t, protocol.TypeError); ok {
+		e := decodeData[protocol.ErrorPayload](t, errMsg)
+		t.Fatalf("expected NewMeld to succeed during the draw phase pre-go-down, got %s: %s", e.Code, e.Message)
+	}
+	newState := decodeData[protocol.StateMessage](t, mustLast(t, conns[current], protocol.TypeState))
+	if len(newState.OurMelds) == 0 {
+		t.Error("expected the staging meld to appear in state")
+	}
+}
+
+func TestMeldStillWrongPhaseDuringDrawAfterGoingDown(t *testing.T) {
+	r := startRoom(t)
+	conns := joinAll(t, r, [4]string{"Alice", "Bob", "Carol", "Dave"})
+
+	state := decodeData[protocol.StateMessage](t, mustLast(t, conns[0], protocol.TypeState))
+	current := state.CurrentPlayer
+
+	// Mark the current player's team as already gone down, and give them
+	// three matching-rank cards — same actor-goroutine constraint as
+	// above.
+	done := make(chan struct{})
+	r.submit(func() {
+		p := r.game.Players[current]
+		p.Team.GoneDown = true
+		p.Hand[9001] = canasta.Card{Id: 9001, Suit: canasta.Hearts, Rank: canasta.Four}
+		p.Hand[9002] = canasta.Card{Id: 9002, Suit: canasta.Diamonds, Rank: canasta.Four}
+		p.Hand[9003] = canasta.Card{Id: 9003, Suit: canasta.Clubs, Rank: canasta.Four}
+		close(done)
+	})
+	<-done
+
+	// meldAllowedInDrawPhase is GoneDown-scoped, not a blanket phase
+	// change — a player extending their team's real, already-gone-down
+	// melds still needs PhasePlaying.
+	r.Submit(current, cmd(t, protocol.TypeNewMeld, protocol.NewMeldPayload{CardIds: []int{9001, 9002, 9003}}))
+	drain(r)
+
+	errMsg, ok := conns[current].last(t, protocol.TypeError)
+	if !ok {
+		t.Fatal("expected NewMeld to still be rejected during the draw phase once gone down")
 	}
 	e := decodeData[protocol.ErrorPayload](t, errMsg)
 	if e.Code != string(protocol.ErrWrongPhase) {
