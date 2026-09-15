@@ -341,6 +341,51 @@ func TestMeldAllowedDuringDrawPhaseBeforeGoingDown(t *testing.T) {
 	}
 }
 
+func TestAddToMeldRejectsStrandingTheHand(t *testing.T) {
+	r := startRoom(t)
+	conns := joinAll(t, r, [4]string{"Alice", "Bob", "Carol", "Dave"})
+
+	state := decodeData[protocol.StateMessage](t, mustLast(t, conns[0], protocol.TypeState))
+	current := state.CurrentPlayer
+
+	// Mirrors the reported soft-lock: a 2-card hand, no go-out
+	// permission, laying one card off on an existing meld — leaving a
+	// single un-discardable card. Mutates r.game, so it must run on the
+	// actor goroutine.
+	done := make(chan struct{})
+	r.submit(func() {
+		p := r.game.Players[current]
+		p.Hand = canasta.PlayerHand{
+			9001: {Id: 9001, Suit: canasta.Hearts, Rank: canasta.Four},
+			9002: {Id: 9002, Suit: canasta.Clubs, Rank: canasta.Eight},
+		}
+		p.Team.Melds = []canasta.Meld{{
+			Id:   100,
+			Rank: canasta.Four,
+			Cards: []canasta.Card{
+				{Id: 1, Suit: canasta.Hearts, Rank: canasta.Four},
+				{Id: 2, Suit: canasta.Spades, Rank: canasta.Four},
+				{Id: 3, Suit: canasta.Diamonds, Rank: canasta.Four},
+			},
+		}}
+		r.game.Phase = canasta.PhasePlaying
+		close(done)
+	})
+	<-done
+
+	r.Submit(current, cmd(t, protocol.TypeAddToMeld, protocol.AddToMeldPayload{CardIds: []int{9001}, MeldId: 100}))
+	drain(r)
+
+	errMsg, ok := conns[current].last(t, protocol.TypeError)
+	if !ok {
+		t.Fatal("expected AddToMeld to be rejected")
+	}
+	e := decodeData[protocol.ErrorPayload](t, errMsg)
+	if e.Code != "WOULD_STRAND_HAND" {
+		t.Errorf("expected code WOULD_STRAND_HAND, got %s", e.Code)
+	}
+}
+
 func TestMeldStillWrongPhaseDuringDrawAfterGoingDown(t *testing.T) {
 	r := startRoom(t)
 	conns := joinAll(t, r, [4]string{"Alice", "Bob", "Carol", "Dave"})

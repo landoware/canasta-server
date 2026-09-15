@@ -77,7 +77,22 @@ func (g *Game) PickUpDiscardPile(p *Player, cardIds []int) error {
 	p.Hand[topCard.GetId()] = topCard
 	cardIds = append(cardIds, topCard.GetId())
 
-	err := g.NewMeld(p, cardIds)
+	// The rest of the discard pile (everything but the top card, already
+	// accounted for by cardIds above) refills the hand right after this
+	// meld is built — check the true resulting hand size, not just what
+	// removing cardIds alone would leave, or a pickup that safely
+	// refills a thin hand could be wrongly rejected.
+	finalHandSize := len(p.Hand) - len(cardIds) + len(g.Hand.DiscardPile) - 1
+	if wouldStrandHand(p.Team.CanGoOut, finalHandSize, 0) {
+		meld, valErr := p.ValidateMeld(cardIds)
+		becomesCanasta := valErr == nil && p.Team.GoneDown && len(meld.Cards) >= 7
+		if valErr != nil || !completesLastCanastaAllowingOneCard(p.Team, finalHandSize, becomesCanasta, meld.Rank, meld.WildCount == 0) {
+			delete(p.Hand, topCard.GetId())
+			return errors.New("WOULD_STRAND_HAND: This would leave your hand too empty to discard from later — must keep at least two cards until your team can go out")
+		}
+	}
+
+	err := g.newMeld(p, cardIds)
 	if err != nil {
 		// Take the card out of their hand
 		delete(p.Hand, topCard.GetId())
@@ -98,7 +113,33 @@ func (g *Game) PickUpDiscardPile(p *Player, cardIds []int) error {
 	return nil
 }
 
-func (g *Game) NewMeld(p *Player, cardIds []int) error {
+// wouldStrandHand reports whether removing cardsToPlay cards from a
+// hand of handSize, without go-out permission, would leave the player
+// unable to ever legally discard again — Discard itself refuses to
+// reduce a hand below 1 card without Team.CanGoOut (see Discard below),
+// so no other hand-reducing mutator may leave fewer than 2 cards either.
+func wouldStrandHand(canGoOut bool, handSize, cardsToPlay int) bool {
+	return !canGoOut && handSize-cardsToPlay < 2
+}
+
+// completesLastCanastaAllowingOneCard reports whether a move that would
+// otherwise strand the hand may proceed anyway: the resulting hand must
+// be exactly 1 card (never 0 — the player needs a card left to actually
+// discard once granted permission — going out is discard-driven, see
+// Discard's EndHand trigger below) and the move itself must complete
+// the team's last required canasta type, so the player can then request
+// go-out permission for exactly this situation.
+func completesLastCanastaAllowingOneCard(t *Team, resultingHandSize int, becomesCanasta bool, rank Rank, natural bool) bool {
+	return resultingHandSize == 1 && becomesCanasta && completesGoOutRequirements(t, rank, natural)
+}
+
+// newMeld builds and applies a meld from cardIds without checking
+// whether doing so would strand the player's hand — callers are
+// responsible for that themselves (see NewMeld and PickUpDiscardPile,
+// whose correct "resulting hand size" differs: PickUpDiscardPile
+// immediately refills from the rest of the discard pile, which this
+// function alone doesn't know about).
+func (g *Game) newMeld(p *Player, cardIds []int) error {
 	meld, err := p.ValidateMeld(cardIds)
 	if err != nil {
 		return err
@@ -118,6 +159,22 @@ func (g *Game) NewMeld(p *Player, cardIds []int) error {
 	// No cards for you
 	p.Hand.removeCards(cardIds)
 	return nil
+}
+
+func (g *Game) NewMeld(p *Player, cardIds []int) error {
+	meld, err := p.ValidateMeld(cardIds)
+	if err != nil {
+		return err
+	}
+
+	if wouldStrandHand(p.Team.CanGoOut, len(p.Hand), len(cardIds)) {
+		resultingHandSize := len(p.Hand) - len(cardIds)
+		becomesCanasta := p.Team.GoneDown && len(meld.Cards) >= 7
+		if !completesLastCanastaAllowingOneCard(p.Team, resultingHandSize, becomesCanasta, meld.Rank, meld.WildCount == 0) {
+			return errors.New("WOULD_STRAND_HAND: Must keep at least two cards in hand until your team can go out")
+		}
+	}
+	return g.newMeld(p, cardIds)
 }
 
 func (g *Game) AddToMeld(p *Player, cardIds []int, meldId int) error {
@@ -141,6 +198,24 @@ func (g *Game) AddToMeld(p *Player, cardIds []int, meldId int) error {
 		meld = &p.Team.Melds[meldIndex]
 	} else {
 		meld = &p.StagingMelds[meldIndex]
+	}
+
+	if wouldStrandHand(p.Team.CanGoOut, len(p.Hand), len(cardIds)) {
+		resultingHandSize := len(p.Hand) - len(cardIds)
+		becomesCanasta, natural := false, false
+		if official {
+			wildCount := meld.WildCount
+			for _, cardId := range cardIds {
+				if p.Hand[cardId].IsWild() {
+					wildCount++
+				}
+			}
+			becomesCanasta = len(meld.Cards)+len(cardIds) >= 7
+			natural = wildCount == 0
+		}
+		if !completesLastCanastaAllowingOneCard(p.Team, resultingHandSize, becomesCanasta, meld.Rank, natural) {
+			return errors.New("WOULD_STRAND_HAND: Must keep at least two cards in hand until your team can go out")
+		}
 	}
 
 	for _, cardId := range cardIds {
@@ -179,6 +254,10 @@ func (g *Game) AddToMeld(p *Player, cardIds []int, meldId int) error {
 }
 
 func (g *Game) BurnCards(p *Player, cardIds []int, canastaId int) error {
+	if wouldStrandHand(p.Team.CanGoOut, len(p.Hand), len(cardIds)) {
+		return errors.New("WOULD_STRAND_HAND: Must keep at least two cards in hand until your team can go out")
+	}
+
 	canastaIndex, err := findIndex(canastaId, p.Team.Canastas)
 	if err != nil {
 		return err

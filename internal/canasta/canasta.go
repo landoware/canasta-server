@@ -105,17 +105,17 @@ type Team struct {
 	RedThrees []Card    `json:"RedThrees"`
 }
 
-// MeetsGoOutRequirements reports whether the team has completed all
-// four canasta types the Pierson house rules require before going out
-// can be attempted (see README.md's "Ending the Hand" section): a
-// natural canasta, an unnatural (mixed-wildcard) canasta, a canasta of
-// all sevens, and a canasta of all wildcards. These are strictly
-// distinct buckets, mirroring Canasta.Score()'s own partitioning above —
-// a sevens or wildcards canasta does not also satisfy the generic
+// meetsGoOutRequirements reports whether canastas cover all four canasta
+// types the Pierson house rules require before going out can be
+// attempted (see README.md's "Ending the Hand" section): a natural
+// canasta, an unnatural (mixed-wildcard) canasta, a canasta of all
+// sevens, and a canasta of all wildcards. These are strictly distinct
+// buckets, mirroring Canasta.Score()'s own partitioning above — a
+// sevens or wildcards canasta does not also satisfy the generic
 // natural/unnatural requirement.
-func (t *Team) MeetsGoOutRequirements() bool {
+func meetsGoOutRequirements(canastas []Canasta) bool {
 	var hasNatural, hasUnnatural, hasSevens, hasWildcards bool
-	for _, c := range t.Canastas {
+	for _, c := range canastas {
 		switch {
 		case c.Rank == Wild:
 			hasWildcards = true
@@ -128,6 +128,21 @@ func (t *Team) MeetsGoOutRequirements() bool {
 		}
 	}
 	return hasNatural && hasUnnatural && hasSevens && hasWildcards
+}
+
+func (t *Team) MeetsGoOutRequirements() bool {
+	return meetsGoOutRequirements(t.Canastas)
+}
+
+// completesGoOutRequirements reports whether adding a hypothetical new
+// canasta of the given rank/naturalness to the team's existing ones
+// would satisfy the go-out requirements — used to let a move that would
+// otherwise strand a player's hand proceed anyway when the move itself
+// is what completes the team's last required canasta type (see
+// completesLastCanastaAllowingOneCard in moves.go).
+func completesGoOutRequirements(t *Team, rank Rank, natural bool) bool {
+	hypothetical := append(append([]Canasta{}, t.Canastas...), Canasta{Rank: rank, Natural: natural})
+	return meetsGoOutRequirements(hypothetical)
 }
 
 var meldRequirements = map[int]int{

@@ -198,6 +198,10 @@ func TestNewMeld(t *testing.T) {
 				Team: &canasta.Team{
 					Melds:    make([]canasta.Meld, 0),
 					GoneDown: tt.hasGoneDown,
+					// This test is about meld validity, not the
+					// hand-stranding rule (see TestWouldStrandHand) —
+					// every case here plays its entire hand.
+					CanGoOut: true,
 				},
 			}
 
@@ -349,6 +353,10 @@ func TestAddToMeld(t *testing.T) {
 
 			player := game.Players[0]
 			player.Hand = hand
+			// This test is about meld validity, not the hand-stranding
+			// rule (see TestWouldStrandHand) — every case here plays
+			// its entire hand.
+			player.Team.CanGoOut = true
 			player.Team.Melds = append(player.Team.Melds, tt.meld)
 
 			err := game.AddToMeld(player, tt.add, game.TeamA.Melds[0].Id)
@@ -491,6 +499,10 @@ func TestAddToMeldCreatesACanasta(t *testing.T) {
 
 			player := game.Players[0]
 			player.Hand = hand
+			// This test is about canasta-completion mechanics, not the
+			// hand-stranding rule (see TestWouldStrandHand) — every
+			// case here plays its entire hand.
+			player.Team.CanGoOut = true
 			player.Team.Melds = append(player.Team.Melds, tt.meld)
 
 			err := game.AddToMeld(player, tt.add, 0)
@@ -532,6 +544,9 @@ func TestNewCanastaGetsAUniqueId(t *testing.T) {
 
 	player := game.Players[0]
 	player.Hand = hand
+	// This test is about canasta id uniqueness, not the hand-stranding
+	// rule (see TestWouldStrandHand) — it plays its whole 2-card hand.
+	player.Team.CanGoOut = true
 	player.Team.Melds = append(player.Team.Melds,
 		canasta.Meld{
 			Id:   100,
@@ -593,6 +608,9 @@ func TestAddToMeldOnStagingMeld(t *testing.T) {
 
 	player := game.Players[0]
 	player.Hand = hand
+	// This test is about staging-meld mechanics, not the hand-stranding
+	// rule (see TestWouldStrandHand) — it plays its whole 1-card hand.
+	player.Team.CanGoOut = true
 	player.StagingMelds = append(player.StagingMelds, canasta.Meld{
 		Id:   0,
 		Rank: canasta.Queen,
@@ -630,6 +648,9 @@ func TestAddToMeldOnStagingMeldDoesNotAutoCanasta(t *testing.T) {
 
 	player := game.Players[0]
 	player.Hand = hand
+	// This test is about staging-meld mechanics, not the hand-stranding
+	// rule (see TestWouldStrandHand) — it plays its whole 1-card hand.
+	player.Team.CanGoOut = true
 	player.StagingMelds = append(player.StagingMelds, canasta.Meld{
 		Id:   0,
 		Rank: canasta.Queen,
@@ -666,6 +687,10 @@ func TestAddToMeldOnAllWildMeldHasNoWildcardCap(t *testing.T) {
 
 	player := game.Players[0]
 	player.Hand = hand
+	// This test is about the all-wild wildcard-cap exception, not the
+	// hand-stranding rule (see TestWouldStrandHand) — it plays its
+	// whole 1-card hand.
+	player.Team.CanGoOut = true
 	player.Team.Melds = append(player.Team.Melds, canasta.Meld{
 		Id:        0,
 		Rank:      canasta.Wild,
@@ -801,6 +826,9 @@ func TestAddSevenCardsToMeld(t *testing.T) {
 			player := game.Players[0]
 			player.Hand = hand
 			player.Team.GoneDown = true
+			// This test is about meld/canasta validity, not the
+			// hand-stranding rule (see TestWouldStrandHand).
+			player.Team.CanGoOut = true
 
 			err := game.NewMeld(player, tt.add)
 
@@ -871,6 +899,9 @@ func TestValidBurnCards(t *testing.T) {
 			g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
 			p := g.Players[0]
 			p.Hand = hand
+			// This test is about burn validity, not the hand-stranding
+			// rule (see TestWouldStrandHand) — it plays its whole hand.
+			p.Team.CanGoOut = true
 			p.Team.Canastas = append(p.Team.Canastas, tt.teamCanasta)
 
 			err := g.BurnCards(p, tt.cardsToBurn, 0)
@@ -992,6 +1023,10 @@ func TestInvalidBurnCards(t *testing.T) {
 			g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
 			p := g.Players[0]
 			p.Hand = hand
+			// This test is about burn validity, not the hand-stranding
+			// rule (see TestWouldStrandHand) — keep the rejection
+			// reason the one each case actually means to exercise.
+			p.Team.CanGoOut = true
 			p.Team.Canastas = append(p.Team.Canastas, tt.teamCanasta)
 
 			err := g.BurnCards(p, tt.cardsToBurn, 0)
@@ -1426,6 +1461,372 @@ func TestPickUpFootTurnTiming(t *testing.T) {
 		}
 		if len(p.Foot) != startingFootLen {
 			t.Error("should not have touched the foot")
+		}
+	})
+}
+
+// TestWouldStrandHand covers the soft-lock this guards against: Discard
+// refuses to discard from a 1-card hand without go-out permission (see
+// TestDiscard's "going out too early" case), so nothing else may ever
+// reduce a hand to 0 or 1 cards without that permission either — a
+// player left holding one un-discardable card would never be able to
+// end their turn again.
+func TestWouldStrandHand(t *testing.T) {
+	t.Run("NewMeld rejects leaving fewer than two cards without permission", func(t *testing.T) {
+		g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+		p := g.Players[0]
+		p.Team.GoneDown = true
+		p.Hand = canasta.PlayerHand{
+			0: {0, canasta.Hearts, canasta.Four},
+			1: {1, canasta.Clubs, canasta.Four},
+			2: {2, canasta.Diamonds, canasta.Four},
+		}
+
+		err := g.NewMeld(p, []int{0, 1, 2})
+
+		if err == nil {
+			t.Error("expected NewMeld to be rejected")
+		}
+		if len(p.Hand) != 3 {
+			t.Error("hand should be untouched by a rejected meld")
+		}
+	})
+
+	t.Run("NewMeld succeeds once granted permission to go out", func(t *testing.T) {
+		g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+		p := g.Players[0]
+		p.Team.GoneDown = true
+		p.Team.CanGoOut = true
+		p.Hand = canasta.PlayerHand{
+			0: {0, canasta.Hearts, canasta.Four},
+			1: {1, canasta.Clubs, canasta.Four},
+			2: {2, canasta.Diamonds, canasta.Four},
+		}
+
+		if err := g.NewMeld(p, []int{0, 1, 2}); err != nil {
+			t.Errorf("expected NewMeld to succeed with go-out permission: %v", err)
+		}
+	})
+
+	t.Run("NewMeld succeeds when spare cards remain", func(t *testing.T) {
+		g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+		p := g.Players[0]
+		p.Team.GoneDown = true
+		p.Hand = canasta.PlayerHand{
+			0: {0, canasta.Hearts, canasta.Four},
+			1: {1, canasta.Clubs, canasta.Four},
+			2: {2, canasta.Diamonds, canasta.Four},
+			3: {3, canasta.Hearts, canasta.Eight},
+			4: {4, canasta.Clubs, canasta.Nine},
+		}
+
+		if err := g.NewMeld(p, []int{0, 1, 2}); err != nil {
+			t.Errorf("expected NewMeld to succeed with 2 cards left over: %v", err)
+		}
+		if len(p.Hand) != 2 {
+			t.Errorf("expected 2 cards left in hand, got %d", len(p.Hand))
+		}
+	})
+
+	// Mirrors the exact reported bug: a 2-card hand, no go-out
+	// permission, laying one card off on an existing meld.
+	t.Run("AddToMeld rejects a 2-card hand laying off one card without permission", func(t *testing.T) {
+		g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+		p := g.Players[0]
+		p.Hand = canasta.PlayerHand{
+			0: {0, canasta.Hearts, canasta.Four},
+			1: {1, canasta.Clubs, canasta.Eight},
+		}
+		p.Team.Melds = append(p.Team.Melds, canasta.Meld{
+			Id:   100,
+			Rank: canasta.Four,
+			Cards: []canasta.Card{
+				{10, canasta.Hearts, canasta.Four},
+				{11, canasta.Spades, canasta.Four},
+				{12, canasta.Diamonds, canasta.Four},
+			},
+		})
+
+		err := g.AddToMeld(p, []int{0}, 100)
+
+		if err == nil {
+			t.Error("expected AddToMeld to be rejected")
+		}
+		if len(p.Hand) != 2 {
+			t.Error("hand should be untouched by a rejected add")
+		}
+	})
+
+	t.Run("AddToMeld succeeds from a 2-card hand once granted permission", func(t *testing.T) {
+		g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+		p := g.Players[0]
+		p.Team.CanGoOut = true
+		p.Hand = canasta.PlayerHand{
+			0: {0, canasta.Hearts, canasta.Four},
+			1: {1, canasta.Clubs, canasta.Eight},
+		}
+		p.Team.Melds = append(p.Team.Melds, canasta.Meld{
+			Id:   100,
+			Rank: canasta.Four,
+			Cards: []canasta.Card{
+				{10, canasta.Hearts, canasta.Four},
+				{11, canasta.Spades, canasta.Four},
+				{12, canasta.Diamonds, canasta.Four},
+			},
+		})
+
+		if err := g.AddToMeld(p, []int{0}, 100); err != nil {
+			t.Errorf("expected AddToMeld to succeed with go-out permission: %v", err)
+		}
+	})
+
+	t.Run("BurnCards rejects leaving fewer than two cards without permission", func(t *testing.T) {
+		g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+		p := g.Players[0]
+		p.Hand = canasta.PlayerHand{
+			7: {7, canasta.Clubs, canasta.Seven},
+		}
+		p.Team.Canastas = append(p.Team.Canastas, canasta.Canasta{
+			Id:   0,
+			Rank: canasta.Seven,
+			Cards: []canasta.Card{
+				{0, canasta.Clubs, canasta.Seven},
+				{1, canasta.Diamonds, canasta.Seven},
+				{2, canasta.Hearts, canasta.Seven},
+				{3, canasta.Spades, canasta.Seven},
+				{4, canasta.Diamonds, canasta.Seven},
+				{5, canasta.Clubs, canasta.Seven},
+				{6, canasta.Hearts, canasta.Seven},
+			},
+		})
+
+		err := g.BurnCards(p, []int{7}, 0)
+
+		if err == nil {
+			t.Error("expected BurnCards to be rejected")
+		}
+		if len(p.Hand) != 1 {
+			t.Error("hand should be untouched by a rejected burn")
+		}
+	})
+
+	// PickUpDiscardPile has its own correct check: it refills the hand
+	// from the rest of the discard pile right after building the meld,
+	// so the danger is specifically an almost-empty pile, not a small
+	// contribution on its own.
+	t.Run("PickUpDiscardPile rejects a 2-card hand when the pile has only the top card", func(t *testing.T) {
+		g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+		p := g.Players[0]
+		p.Team.GoneDown = true
+		p.Hand = canasta.PlayerHand{
+			1: {1, canasta.Clubs, canasta.Six},
+			2: {2, canasta.Hearts, canasta.Six},
+		}
+		g.Hand.DiscardPile = []canasta.Card{{0, canasta.Spades, canasta.Six}}
+
+		err := g.PickUpDiscardPile(p, []int{1, 2})
+
+		if err == nil {
+			t.Error("expected PickUpDiscardPile to be rejected")
+		}
+		if len(p.Hand) != 2 {
+			t.Error("hand should be untouched by a rejected pickup")
+		}
+		if len(g.Hand.DiscardPile) != 1 {
+			t.Error("discard pile should be untouched by a rejected pickup")
+		}
+	})
+
+	t.Run("PickUpDiscardPile succeeds when the rest of the pile refills the hand", func(t *testing.T) {
+		g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+		p := g.Players[0]
+		p.Team.GoneDown = true
+		p.Hand = canasta.PlayerHand{
+			1: {1, canasta.Clubs, canasta.Six},
+			2: {2, canasta.Hearts, canasta.Six},
+		}
+		// Same 2-card contribution as above, but padded with 3 extra
+		// pile cards this time — matches the existing convention in
+		// TestValidPickupDiscardPile.
+		for i := range 3 {
+			g.Hand.DiscardPile = append(g.Hand.DiscardPile, canasta.Card{i + 10, canasta.Spades, canasta.Three})
+		}
+		g.Hand.DiscardPile = append(g.Hand.DiscardPile, canasta.Card{0, canasta.Spades, canasta.Six})
+
+		if err := g.PickUpDiscardPile(p, []int{1, 2}); err != nil {
+			t.Errorf("expected PickUpDiscardPile to succeed once the pile refills the hand: %v", err)
+		}
+		if len(p.Hand) != 3 {
+			t.Errorf("expected 3 cards (the padding) left in hand, got %d", len(p.Hand))
+		}
+	})
+
+	// The escape hatch: a move that would otherwise strand the hand may
+	// still proceed when the move itself completes the team's last
+	// required canasta type, leaving exactly one card — mirrors the
+	// reported edge case (a 2-card hand: King + a wildcard, adding the
+	// wildcard to an existing 6-card meld completes the missing
+	// "unnatural" canasta type).
+	t.Run("AddToMeld succeeds when it completes the team's last required canasta type, leaving exactly one card", func(t *testing.T) {
+		g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+		p := g.Players[0]
+		p.Team.GoneDown = true
+		// Already covers natural, sevens, and wildcards — only
+		// unnatural is missing.
+		p.Team.Canastas = []canasta.Canasta{
+			{Id: 1, Rank: canasta.Four, Cards: makeCards(1, canasta.Four, 7), Natural: true},
+			{Id: 2, Rank: canasta.Seven, Cards: makeCards(201, canasta.Seven, 7), Natural: true},
+			{Id: 3, Rank: canasta.Wild, Cards: makeCards(301, canasta.Two, 7), Natural: false},
+		}
+		// A 6-card Queens meld, one wildcard away from completing an
+		// unnatural canasta.
+		p.Team.Melds = []canasta.Meld{{Id: 100, Rank: canasta.Queen, Cards: makeCards(400, canasta.Queen, 6)}}
+		p.Hand = canasta.PlayerHand{
+			500: {500, canasta.Clubs, canasta.King},
+			501: {501, canasta.Wild, canasta.Two},
+		}
+
+		err := g.AddToMeld(p, []int{501}, 100)
+
+		if err != nil {
+			t.Errorf("expected AddToMeld to succeed, completing the last required canasta type: %v", err)
+		}
+		if len(p.Hand) != 1 {
+			t.Errorf("expected exactly 1 card left in hand, got %d", len(p.Hand))
+		}
+		if !p.Team.MeetsGoOutRequirements() {
+			t.Error("expected the team to now meet the go-out requirements")
+		}
+	})
+
+	t.Run("AddToMeld still rejects when the resulting canasta does not complete a missing requirement", func(t *testing.T) {
+		g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+		p := g.Players[0]
+		p.Team.GoneDown = true
+		// Already has a natural, an unnatural, and a wildcards canasta —
+		// only sevens is missing, but this meld isn't sevens, so
+		// completing it doesn't help.
+		p.Team.Canastas = []canasta.Canasta{
+			{Id: 1, Rank: canasta.Four, Cards: makeCards(1, canasta.Four, 7), Natural: true},
+			{Id: 2, Rank: canasta.Five, Cards: makeCards(101, canasta.Five, 7), Natural: false},
+			{Id: 3, Rank: canasta.Wild, Cards: makeCards(301, canasta.Two, 7), Natural: false},
+		}
+		p.Team.Melds = []canasta.Meld{{Id: 100, Rank: canasta.Queen, Cards: makeCards(400, canasta.Queen, 6)}}
+		p.Hand = canasta.PlayerHand{
+			500: {500, canasta.Clubs, canasta.King},
+			501: {501, canasta.Diamonds, canasta.Queen},
+		}
+
+		err := g.AddToMeld(p, []int{501}, 100)
+
+		if err == nil {
+			t.Error("expected AddToMeld to still be rejected — completing a second natural canasta doesn't help")
+		}
+		if len(p.Hand) != 2 {
+			t.Error("hand should be untouched by a rejected add")
+		}
+	})
+
+	t.Run("AddToMeld still rejects leaving zero cards, even completing the last required type", func(t *testing.T) {
+		g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+		p := g.Players[0]
+		p.Team.GoneDown = true
+		p.Team.Canastas = []canasta.Canasta{
+			{Id: 1, Rank: canasta.Four, Cards: makeCards(1, canasta.Four, 7), Natural: true},
+			{Id: 2, Rank: canasta.Seven, Cards: makeCards(201, canasta.Seven, 7), Natural: true},
+			{Id: 3, Rank: canasta.Wild, Cards: makeCards(301, canasta.Two, 7), Natural: false},
+		}
+		p.Team.Melds = []canasta.Meld{{Id: 100, Rank: canasta.Queen, Cards: makeCards(400, canasta.Queen, 6)}}
+		// Only the one wildcard in hand — playing it leaves 0 cards, not 1.
+		p.Hand = canasta.PlayerHand{
+			501: {501, canasta.Wild, canasta.Two},
+		}
+
+		err := g.AddToMeld(p, []int{501}, 100)
+
+		if err == nil {
+			t.Error("expected AddToMeld to be rejected — would leave zero cards, not one")
+		}
+	})
+
+	t.Run("AddToMeld still rejects a completing-size staging meld before going down", func(t *testing.T) {
+		g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+		p := g.Players[0]
+		// Not gone down — Team.Canastas can't exist yet, and even a
+		// 7-card staging meld doesn't immediately become a canasta.
+		p.StagingMelds = []canasta.Meld{{Id: 100, Rank: canasta.Queen, Cards: makeCards(400, canasta.Queen, 6)}}
+		p.Hand = canasta.PlayerHand{
+			500: {500, canasta.Clubs, canasta.King},
+			501: {501, canasta.Wild, canasta.Two},
+		}
+
+		err := g.AddToMeld(p, []int{501}, 100)
+
+		if err == nil {
+			t.Error("expected AddToMeld to be rejected — staging melds never immediately complete a canasta")
+		}
+	})
+
+	t.Run("NewMeld succeeds when it completes the team's last required canasta type, leaving exactly one card", func(t *testing.T) {
+		g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+		p := g.Players[0]
+		p.Team.GoneDown = true
+		// Already covers natural, unnatural, and wildcards — only
+		// sevens is missing.
+		p.Team.Canastas = []canasta.Canasta{
+			{Id: 1, Rank: canasta.Four, Cards: makeCards(1, canasta.Four, 7), Natural: true},
+			{Id: 2, Rank: canasta.Five, Cards: makeCards(101, canasta.Five, 7), Natural: false},
+			{Id: 3, Rank: canasta.Wild, Cards: makeCards(301, canasta.Two, 7), Natural: false},
+		}
+		sevens := makeCards(500, canasta.Seven, 7)
+		hand := canasta.PlayerHand{}
+		var cardIds []int
+		for _, c := range sevens {
+			hand[c.GetId()] = c
+			cardIds = append(cardIds, c.GetId())
+		}
+		hand[600] = canasta.Card{600, canasta.Clubs, canasta.King} // spare card left over
+		p.Hand = hand
+
+		err := g.NewMeld(p, cardIds)
+
+		if err != nil {
+			t.Errorf("expected NewMeld to succeed, completing the last required canasta type: %v", err)
+		}
+		if len(p.Hand) != 1 {
+			t.Errorf("expected exactly 1 card left in hand, got %d", len(p.Hand))
+		}
+	})
+
+	t.Run("PickUpDiscardPile succeeds when it completes the team's last required canasta type, leaving exactly one card", func(t *testing.T) {
+		g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+		p := g.Players[0]
+		p.Team.GoneDown = true
+		// Already covers natural, unnatural, and sevens — only
+		// wildcards is missing.
+		p.Team.Canastas = []canasta.Canasta{
+			{Id: 1, Rank: canasta.Four, Cards: makeCards(1, canasta.Four, 7), Natural: true},
+			{Id: 2, Rank: canasta.Five, Cards: makeCards(101, canasta.Five, 7), Natural: false},
+			{Id: 3, Rank: canasta.Seven, Cards: makeCards(201, canasta.Seven, 7), Natural: true},
+		}
+		twos := makeCards(500, canasta.Two, 6)
+		hand := canasta.PlayerHand{}
+		var cardIds []int
+		for _, c := range twos {
+			hand[c.GetId()] = c
+			cardIds = append(cardIds, c.GetId())
+		}
+		hand[600] = canasta.Card{600, canasta.Clubs, canasta.King} // spare card left over
+		p.Hand = hand
+		g.Hand.DiscardPile = []canasta.Card{{0, canasta.Wild, canasta.Joker}}
+
+		err := g.PickUpDiscardPile(p, cardIds)
+
+		if err != nil {
+			t.Errorf("expected PickUpDiscardPile to succeed, completing the last required canasta type: %v", err)
+		}
+		if len(p.Hand) != 1 {
+			t.Errorf("expected exactly 1 card left in hand, got %d", len(p.Hand))
 		}
 	})
 }
