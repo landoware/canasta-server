@@ -66,6 +66,186 @@ func TestDrawRedThree(t *testing.T) {
 
 }
 
+func TestPlayRedThreeFromHand(t *testing.T) {
+	g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+	p := g.Players[0]
+	g.Phase = canasta.PhaseDrawing
+
+	redThree := canasta.Card{100, canasta.Hearts, canasta.Three}
+	p.Hand = canasta.PlayerHand{
+		redThree.Id: redThree,
+		1:           {1, canasta.Clubs, canasta.Four},
+	}
+	g.Hand.Deck.Cards = []canasta.Card{
+		{0, canasta.Clubs, canasta.Five},
+		{2, canasta.Clubs, canasta.Six},
+	}
+
+	startingHandLength := len(p.Hand)
+	startingDeckLength := g.Hand.Deck.Count()
+
+	if err := g.PlayRedThree(p, []int{redThree.Id}, false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(p.Hand) != startingHandLength {
+		t.Errorf("hand size changed: got %d, want %d (lost the three, gained a replacement)", len(p.Hand), startingHandLength)
+	}
+	if g.Hand.Deck.Count() != startingDeckLength-1 {
+		t.Errorf("deck count: got %d, want %d", g.Hand.Deck.Count(), startingDeckLength-1)
+	}
+	if len(p.Team.RedThrees) != 1 {
+		t.Errorf("red three not added to team: got %d, want 1", len(p.Team.RedThrees))
+	}
+	if _, stillInHand := p.Hand[redThree.Id]; stillInHand {
+		t.Error("red three still in hand")
+	}
+	if g.Phase != canasta.PhaseDrawing {
+		t.Error("phase should remain PhaseDrawing")
+	}
+}
+
+func TestPlayRedThreeFromFoot(t *testing.T) {
+	g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+	p := g.Players[0]
+	g.Phase = canasta.PhaseDrawing
+
+	redThree := canasta.Card{100, canasta.Diamonds, canasta.Three}
+	p.Hand = canasta.PlayerHand{
+		redThree.Id: redThree,
+		1:           {1, canasta.Clubs, canasta.Four},
+	}
+	g.Hand.Deck.Cards = []canasta.Card{
+		{0, canasta.Clubs, canasta.Five},
+		{2, canasta.Clubs, canasta.Six},
+	}
+
+	startingHandLength := len(p.Hand)
+	startingDeckLength := g.Hand.Deck.Count()
+
+	if err := g.PlayRedThree(p, []int{redThree.Id}, true); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(p.Hand) != startingHandLength-1 {
+		t.Errorf("hand size: got %d, want %d (no replacement for a foot-origin red three)", len(p.Hand), startingHandLength-1)
+	}
+	if g.Hand.Deck.Count() != startingDeckLength {
+		t.Errorf("deck count changed: got %d, want %d (no card should be drawn)", g.Hand.Deck.Count(), startingDeckLength)
+	}
+	if len(p.Team.RedThrees) != 1 {
+		t.Errorf("red three not added to team: got %d, want 1", len(p.Team.RedThrees))
+	}
+	if _, stillInHand := p.Hand[redThree.Id]; stillInHand {
+		t.Error("red three still in hand")
+	}
+	if g.Phase != canasta.PhaseDrawing {
+		t.Error("phase should remain PhaseDrawing")
+	}
+}
+
+func TestPlayRedThreeMultipleCards(t *testing.T) {
+	tests := []struct {
+		name           string
+		fromFoot       bool
+		wantDeckChange int
+		wantHandChange int
+	}{
+		{name: "from hand draws one replacement per card", fromFoot: false, wantDeckChange: -2, wantHandChange: 0},
+		{name: "from foot draws no replacements", fromFoot: true, wantDeckChange: 0, wantHandChange: -2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+			p := g.Players[0]
+			g.Phase = canasta.PhaseDrawing
+
+			redThrees := []canasta.Card{
+				{100, canasta.Hearts, canasta.Three},
+				{101, canasta.Diamonds, canasta.Three},
+			}
+			p.Hand = canasta.PlayerHand{
+				redThrees[0].Id: redThrees[0],
+				redThrees[1].Id: redThrees[1],
+				1:               {1, canasta.Clubs, canasta.Four},
+			}
+			g.Hand.Deck.Cards = []canasta.Card{
+				{0, canasta.Clubs, canasta.Five},
+				{2, canasta.Clubs, canasta.Six},
+				{3, canasta.Clubs, canasta.Seven},
+			}
+
+			startingHandLength := len(p.Hand)
+			startingDeckLength := g.Hand.Deck.Count()
+
+			err := g.PlayRedThree(p, []int{redThrees[0].Id, redThrees[1].Id}, tt.fromFoot)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if len(p.Hand) != startingHandLength+tt.wantHandChange {
+				t.Errorf("hand size: got %d, want %d", len(p.Hand), startingHandLength+tt.wantHandChange)
+			}
+			if g.Hand.Deck.Count() != startingDeckLength+tt.wantDeckChange {
+				t.Errorf("deck count: got %d, want %d", g.Hand.Deck.Count(), startingDeckLength+tt.wantDeckChange)
+			}
+			if len(p.Team.RedThrees) != 2 {
+				t.Errorf("red threes not added to team: got %d, want 2", len(p.Team.RedThrees))
+			}
+		})
+	}
+}
+
+func TestPlayRedThreeWrongPhase(t *testing.T) {
+	g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+	p := g.Players[0]
+	g.Phase = canasta.PhasePlaying
+
+	redThree := canasta.Card{100, canasta.Hearts, canasta.Three}
+	p.Hand = canasta.PlayerHand{redThree.Id: redThree}
+
+	err := g.PlayRedThree(p, []int{redThree.Id}, false)
+	if err == nil {
+		t.Fatal("expected an error when playing a red three outside the drawing phase")
+	}
+	if _, removed := p.Hand[redThree.Id]; !removed {
+		t.Error("hand should be unchanged after a rejected play")
+	}
+	if len(p.Team.RedThrees) != 0 {
+		t.Error("team red threes should be unchanged after a rejected play")
+	}
+}
+
+func TestPlayRedThreeInvalidCard(t *testing.T) {
+	g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+	p := g.Players[0]
+	g.Phase = canasta.PhaseDrawing
+
+	blackThree := canasta.Card{100, canasta.Clubs, canasta.Three}
+	p.Hand = canasta.PlayerHand{blackThree.Id: blackThree}
+
+	err := g.PlayRedThree(p, []int{blackThree.Id}, false)
+	if err == nil {
+		t.Fatal("expected an error when playing a black three as a red three")
+	}
+	if _, removed := p.Hand[blackThree.Id]; !removed {
+		t.Error("hand should be unchanged after a rejected play")
+	}
+}
+
+func TestPlayRedThreeCardNotInHand(t *testing.T) {
+	g := canasta.NewGame("ABCE", []string{"A", "B", "C", "D"})
+	p := g.Players[0]
+	g.Phase = canasta.PhaseDrawing
+	p.Hand = canasta.PlayerHand{}
+
+	err := g.PlayRedThree(p, []int{999}, false)
+	if err == nil {
+		t.Fatal("expected an error when playing a card not in hand")
+	}
+}
+
 func TestNewMeld(t *testing.T) {
 	tests := []struct {
 		name        string
