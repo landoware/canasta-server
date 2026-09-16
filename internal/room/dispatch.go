@@ -114,11 +114,13 @@ var mutators = map[protocol.MessageType]mutator{
 // non-nil payload and r.game is untouched. Only ever called from the room
 // actor goroutine.
 func (r *Room) applyCommand(seatIdx int, msg protocol.ClientMessage) *protocol.ErrorPayload {
+	pos := r.posForConnSlot(seatIdx)
+
 	if msg.Type == protocol.TypeGrantPermissionToGoOut {
-		return r.applyGrantPermission(seatIdx)
+		return r.applyGrantPermission(pos)
 	}
 	if msg.Type == protocol.TypeAskToGoOut {
-		return r.applyAskToGoOut(seatIdx)
+		return r.applyAskToGoOut(pos)
 	}
 
 	fn, ok := mutators[msg.Type]
@@ -127,21 +129,21 @@ func (r *Room) applyCommand(seatIdx int, msg protocol.ClientMessage) *protocol.E
 	}
 
 	if !turnAndPhaseExempt[msg.Type] {
-		if seatIdx != r.game.CurrentPlayer {
+		if pos != r.game.CurrentPlayer {
 			return &protocol.ErrorPayload{Code: string(protocol.ErrNotYourTurn), Message: "it is not your turn"}
 		}
 
 		if requiredPhase, ok := phaseForType[msg.Type]; ok && r.game.Phase != requiredPhase {
 			stagingExempt := meldAllowedInDrawPhase[msg.Type] &&
 				r.game.Phase == canasta.PhaseDrawing &&
-				!r.game.Players[seatIdx].Team.GoneDown
+				!r.game.Players[pos].Team.GoneDown
 			if !stagingExempt {
 				return &protocol.ErrorPayload{Code: string(protocol.ErrWrongPhase), Message: "wrong phase for this action"}
 			}
 		}
 	}
 
-	player := r.game.Players[seatIdx]
+	player := r.game.Players[pos]
 	if err := fn(r.game, player, msg.Data); err != nil {
 		code, message := protocol.ClassifyGameError(err)
 		return &protocol.ErrorPayload{Code: string(code), Message: message}
@@ -151,15 +153,16 @@ func (r *Room) applyCommand(seatIdx int, msg protocol.ClientMessage) *protocol.E
 }
 
 // applyGrantPermission requires the sender to be the current player's
-// partner (via the fixed 0/2-1/3 seating invariant) rather than requiring
-// it to be their own turn.
-func (r *Room) applyGrantPermission(seatIdx int) *protocol.ErrorPayload {
+// partner (via the fixed 0/2-1/3 table-position seating invariant) rather
+// than requiring it to be their own turn. pos is the sender's table
+// position (see posForConnSlot), not their raw connection slot.
+func (r *Room) applyGrantPermission(pos int) *protocol.ErrorPayload {
 	partnerOf := (r.game.CurrentPlayer + 2) % 4
-	if seatIdx != partnerOf {
+	if pos != partnerOf {
 		return &protocol.ErrorPayload{Code: string(protocol.ErrNotPartner), Message: "only the current player's partner may grant permission to go out"}
 	}
 
-	if err := r.game.GrantPermissionToGoOut(r.game.Players[seatIdx]); err != nil {
+	if err := r.game.GrantPermissionToGoOut(r.game.Players[pos]); err != nil {
 		code, message := protocol.ClassifyGameError(err)
 		return &protocol.ErrorPayload{Code: string(code), Message: message}
 	}
@@ -174,8 +177,9 @@ func (r *Room) applyGrantPermission(seatIdx int) *protocol.ErrorPayload {
 // the notification trigger, not a state mutation). Unlike every other
 // command, this isn't turn-scoped at all: Team.CanGoOut never resets
 // once granted, so there's no reason to require it be the asker's turn.
-func (r *Room) applyAskToGoOut(seatIdx int) *protocol.ErrorPayload {
-	team := r.game.Players[seatIdx].Team
+// pos is the sender's table position (see posForConnSlot).
+func (r *Room) applyAskToGoOut(pos int) *protocol.ErrorPayload {
+	team := r.game.Players[pos].Team
 	if !team.GoneDown {
 		return &protocol.ErrorPayload{Code: "CANNOT_GO_OUT", Message: "team must go down before asking to go out"}
 	}
@@ -186,8 +190,9 @@ func (r *Room) applyAskToGoOut(seatIdx int) *protocol.ErrorPayload {
 		return &protocol.ErrorPayload{Code: "ALREADY_GRANTED", Message: "permission to go out has already been granted"}
 	}
 
-	partnerSeat := (seatIdx + 2) % 4
-	askerName := r.game.Players[seatIdx].Name
-	r.sendTo(partnerSeat, protocol.NewServerMessage(protocol.TypeGoOutRequested, protocol.GoOutRequestedPayload{AskerName: askerName}))
+	partnerPos := (pos + 2) % 4
+	partnerConnSlot := r.tableOrder[partnerPos]
+	askerName := r.game.Players[pos].Name
+	r.sendTo(partnerConnSlot, protocol.NewServerMessage(protocol.TypeGoOutRequested, protocol.GoOutRequestedPayload{AskerName: askerName}))
 	return nil
 }

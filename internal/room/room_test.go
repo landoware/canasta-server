@@ -124,8 +124,11 @@ func joinAndAttach(t *testing.T, r *Room, name string) (int, *fakeConn) {
 	return seatIdx, conn
 }
 
-// joinAll joins all four seats with the given names (in seat order) and
-// drains the actor, returning each seat's fakeConn.
+// joinAll joins all four seats with the given names (in seat order), then
+// has every seat ready up and the host (always seat 0, since it's always
+// the first to join) start the game, mirroring the real client flow now
+// that the room no longer auto-starts on the 4th join. Returns each seat's
+// fakeConn once the game has started.
 func joinAll(t *testing.T, r *Room, names [4]string) [4]*fakeConn {
 	t.Helper()
 	var conns [4]*fakeConn
@@ -137,6 +140,13 @@ func joinAll(t *testing.T, r *Room, names [4]string) [4]*fakeConn {
 		conns[i] = conn
 	}
 	drain(r)
+
+	for i := range conns {
+		r.Submit(i, cmd(t, protocol.TypeSetReady, protocol.SetReadyPayload{Ready: true}))
+	}
+	r.Submit(0, cmd(t, protocol.TypeStartGame, struct{}{}))
+	drain(r)
+
 	return conns
 }
 
@@ -198,21 +208,244 @@ func TestNewConnectionWinsOnCollision(t *testing.T) {
 	}
 }
 
-func TestLobbyStartsGameOnFourthJoin(t *testing.T) {
+func TestFourthJoinDoesNotAutoStart(t *testing.T) {
+	r := startRoom(t)
+	var conns [4]*fakeConn
+	for i, name := range [4]string{"Alice", "Bob", "Carol", "Dave"} {
+		seatIdx, conn := joinAndAttach(t, r, name)
+		if seatIdx != i {
+			t.Fatalf("expected seat index %d, got %d", i, seatIdx)
+		}
+		conns[i] = conn
+	}
+	drain(r)
+
+	for i, c := range conns {
+		if _, ok := c.last(t, protocol.TypeState); ok {
+			t.Errorf("seat %d: expected no state message before the host starts the game", i)
+		}
+		lobby, ok := c.last(t, protocol.TypePlayersLobby)
+		if !ok {
+			t.Fatalf("seat %d: expected a players_lobby broadcast", i)
+		}
+		payload := decodeData[protocol.PlayersLobbyPayload](t, lobby)
+		if len(payload.Seats) != 4 {
+			t.Fatalf("seat %d: expected 4 lobby seats, got %d", i, len(payload.Seats))
+		}
+		for _, s := range payload.Seats {
+			if s.Name == "" {
+				t.Errorf("seat %d: expected all seats named, got %+v", i, payload.Seats)
+			}
+		}
+	}
+}
+
+func TestFirstJoinerIsHost(t *testing.T) {
+	r := startRoom(t)
+	conns := [4]*fakeConn{}
+	for i, name := range [4]string{"Alice", "Bob", "Carol", "Dave"} {
+		_, conn := joinAndAttach(t, r, name)
+		conns[i] = conn
+	}
+	drain(r)
+
+	lobby := decodeData[protocol.PlayersLobbyPayload](t, mustLast(t, conns[0], protocol.TypePlayersLobby))
+	for _, s := range lobby.Seats {
+		if s.Name == "Alice" && !s.IsHost {
+			t.Error("expected the first joiner (Alice) to be host")
+		}
+		if s.Name != "Alice" && s.IsHost {
+			t.Errorf("expected only Alice to be host, but %q is host too", s.Name)
+		}
+	}
+}
+
+func TestSetReadyMarksSeatReady(t *testing.T) {
+	r := startRoom(t)
+	conns := [4]*fakeConn{}
+	for i, name := range [4]string{"Alice", "Bob", "Carol", "Dave"} {
+		_, conn := joinAndAttach(t, r, name)
+		conns[i] = conn
+	}
+	drain(r)
+
+	r.Submit(1, cmd(t, protocol.TypeSetReady, protocol.SetReadyPayload{Ready: true}))
+	drain(r)
+
+	lobby := decodeData[protocol.PlayersLobbyPayload](t, mustLast(t, conns[0], protocol.TypePlayersLobby))
+	for _, s := range lobby.Seats {
+		wantReady := s.Name == "Bob"
+		if s.Ready != wantReady {
+			t.Errorf("seat %q: expected Ready=%v, got %v", s.Name, wantReady, s.Ready)
+		}
+	}
+}
+
+func TestReorderSeatsHostOnly(t *testing.T) {
+	r := startRoom(t)
+	conns := [4]*fakeConn{}
+	for i, name := range [4]string{"Alice", "Bob", "Carol", "Dave"} {
+		_, conn := joinAndAttach(t, r, name)
+		conns[i] = conn
+	}
+	drain(r)
+
+	r.Submit(1, cmd(t, protocol.TypeReorderSeats, protocol.ReorderSeatsPayload{Order: []int{1, 0, 2, 3}}))
+	drain(r)
+
+	errMsg, ok := conns[1].last(t, protocol.TypeError)
+	if !ok {
+		t.Fatal("expected an error for a non-host reorder attempt")
+	}
+	e := decodeData[protocol.ErrorPayload](t, errMsg)
+	if e.Code != string(protocol.ErrNotHost) {
+		t.Errorf("expected code %s, got %s", protocol.ErrNotHost, e.Code)
+	}
+
+	lobby := decodeData[protocol.PlayersLobbyPayload](t, mustLast(t, conns[0], protocol.TypePlayersLobby))
+	if lobby.Seats[0].Name != "Alice" {
+		t.Errorf("expected table order unchanged after rejected reorder, got %+v", lobby.Seats)
+	}
+}
+
+func TestReorderSeatsInvalidPayloadRejected(t *testing.T) {
+	r := startRoom(t)
+	conns := [4]*fakeConn{}
+	for i, name := range [4]string{"Alice", "Bob", "Carol", "Dave"} {
+		_, conn := joinAndAttach(t, r, name)
+		conns[i] = conn
+	}
+	drain(r)
+
+	r.Submit(0, cmd(t, protocol.TypeReorderSeats, protocol.ReorderSeatsPayload{Order: []int{0, 0, 2, 3}}))
+	drain(r)
+
+	errMsg, ok := conns[0].last(t, protocol.TypeError)
+	if !ok {
+		t.Fatal("expected an error for a non-permutation reorder payload")
+	}
+	e := decodeData[protocol.ErrorPayload](t, errMsg)
+	if e.Code != string(protocol.ErrInvalidPayload) {
+		t.Errorf("expected code %s, got %s", protocol.ErrInvalidPayload, e.Code)
+	}
+}
+
+func TestReorderSeatsAppliesNewTableOrder(t *testing.T) {
+	r := startRoom(t)
+	conns := [4]*fakeConn{}
+	for i, name := range [4]string{"Alice", "Bob", "Carol", "Dave"} {
+		_, conn := joinAndAttach(t, r, name)
+		conns[i] = conn
+	}
+	drain(r)
+
+	// Swap Alice (conn slot 0) and Bob (conn slot 1) at the table.
+	r.Submit(0, cmd(t, protocol.TypeReorderSeats, protocol.ReorderSeatsPayload{Order: []int{1, 0, 2, 3}}))
+	for i := range conns {
+		r.Submit(i, cmd(t, protocol.TypeSetReady, protocol.SetReadyPayload{Ready: true}))
+	}
+	r.Submit(0, cmd(t, protocol.TypeStartGame, struct{}{}))
+	drain(r)
+
+	// conn slot 0 (Alice) now sits at table position 1; conn slot 1 (Bob) at 0.
+	aliceState := decodeData[protocol.StateMessage](t, mustLast(t, conns[0], protocol.TypeState))
+	if aliceState.Name != "Alice" || aliceState.SeatIndex != 1 {
+		t.Errorf("expected Alice at table position 1, got name=%q seatIndex=%d", aliceState.Name, aliceState.SeatIndex)
+	}
+	bobState := decodeData[protocol.StateMessage](t, mustLast(t, conns[1], protocol.TypeState))
+	if bobState.Name != "Bob" || bobState.SeatIndex != 0 {
+		t.Errorf("expected Bob at table position 0, got name=%q seatIndex=%d", bobState.Name, bobState.SeatIndex)
+	}
+
+	// Turn order and command routing must follow the new table order: it's
+	// table position 0's (Bob's) turn, so only conn slot 1 may act.
+	if bobState.CurrentPlayer != 0 {
+		t.Fatalf("expected table position 0 to start, got CurrentPlayer=%d", bobState.CurrentPlayer)
+	}
+	r.Submit(0, cmd(t, protocol.TypeDrawFromDeck, struct{}{})) // Alice, conn slot 0, table position 1 — not her turn
+	drain(r)
+	errMsg, ok := conns[0].last(t, protocol.TypeError)
+	if !ok {
+		t.Fatal("expected an out-of-turn error for Alice after reorder")
+	}
+	e := decodeData[protocol.ErrorPayload](t, errMsg)
+	if e.Code != string(protocol.ErrNotYourTurn) {
+		t.Errorf("expected code %s, got %s", protocol.ErrNotYourTurn, e.Code)
+	}
+}
+
+func TestStartGameRequiresAllSeatsFilled(t *testing.T) {
+	r := startRoom(t)
+	_, conn := joinAndAttach(t, r, "Alice")
+	drain(r)
+
+	r.Submit(0, cmd(t, protocol.TypeStartGame, struct{}{}))
+	drain(r)
+
+	errMsg, ok := conn.last(t, protocol.TypeError)
+	if !ok {
+		t.Fatal("expected an error when starting with empty seats")
+	}
+	e := decodeData[protocol.ErrorPayload](t, errMsg)
+	if e.Code != string(protocol.ErrSeatsNotFull) {
+		t.Errorf("expected code %s, got %s", protocol.ErrSeatsNotFull, e.Code)
+	}
+}
+
+func TestStartGameRequiresAllReady(t *testing.T) {
+	r := startRoom(t)
+	conns := [4]*fakeConn{}
+	for i, name := range [4]string{"Alice", "Bob", "Carol", "Dave"} {
+		_, conn := joinAndAttach(t, r, name)
+		conns[i] = conn
+	}
+	drain(r)
+
+	r.Submit(0, cmd(t, protocol.TypeStartGame, struct{}{}))
+	drain(r)
+
+	errMsg, ok := conns[0].last(t, protocol.TypeError)
+	if !ok {
+		t.Fatal("expected an error when starting before everyone is ready")
+	}
+	e := decodeData[protocol.ErrorPayload](t, errMsg)
+	if e.Code != string(protocol.ErrNotAllReady) {
+		t.Errorf("expected code %s, got %s", protocol.ErrNotAllReady, e.Code)
+	}
+}
+
+func TestStartGameHostOnly(t *testing.T) {
+	r := startRoom(t)
+	conns := [4]*fakeConn{}
+	for i, name := range [4]string{"Alice", "Bob", "Carol", "Dave"} {
+		_, conn := joinAndAttach(t, r, name)
+		conns[i] = conn
+	}
+	for i := range conns {
+		r.Submit(i, cmd(t, protocol.TypeSetReady, protocol.SetReadyPayload{Ready: true}))
+	}
+	drain(r)
+
+	r.Submit(1, cmd(t, protocol.TypeStartGame, struct{}{}))
+	drain(r)
+
+	errMsg, ok := conns[1].last(t, protocol.TypeError)
+	if !ok {
+		t.Fatal("expected an error for a non-host start attempt")
+	}
+	e := decodeData[protocol.ErrorPayload](t, errMsg)
+	if e.Code != string(protocol.ErrNotHost) {
+		t.Errorf("expected code %s, got %s", protocol.ErrNotHost, e.Code)
+	}
+	if _, ok := conns[1].last(t, protocol.TypeState); ok {
+		t.Error("expected the game not to have started")
+	}
+}
+
+func TestStartGameSucceedsWhenReadyAndHost(t *testing.T) {
 	r := startRoom(t)
 	conns := joinAll(t, r, [4]string{"Alice", "Bob", "Carol", "Dave"})
 
-	welcome, ok := conns[0].last(t, protocol.TypeWelcome)
-	if !ok {
-		t.Fatal("expected a welcome message")
-	}
-	w := decodeData[protocol.WelcomePayload](t, welcome)
-	if w.SeatIndex != 0 || w.RoomCode != "TEST01" {
-		t.Errorf("unexpected welcome payload: %+v", w)
-	}
-
-	// All four seats should have received an initial state broadcast once
-	// the game started.
 	for i, c := range conns {
 		state, ok := c.last(t, protocol.TypeState)
 		if !ok {
@@ -227,6 +460,67 @@ func TestLobbyStartsGameOnFourthJoin(t *testing.T) {
 		}
 		if s.Phase != phaseDrawingForTest {
 			t.Errorf("seat %d: expected drawing phase at hand start, got %q", i, s.Phase)
+		}
+	}
+}
+
+func TestHostStaysHostAfterDisconnect(t *testing.T) {
+	r := startRoom(t)
+	conns := [4]*fakeConn{}
+	for i, name := range [4]string{"Alice", "Bob", "Carol", "Dave"} {
+		_, conn := joinAndAttach(t, r, name)
+		conns[i] = conn
+	}
+	drain(r)
+
+	r.Disconnect(0, conns[0])
+	drain(r)
+
+	r.Submit(1, cmd(t, protocol.TypeStartGame, struct{}{}))
+	drain(r)
+	errMsg, ok := conns[1].last(t, protocol.TypeError)
+	if !ok || decodeData[protocol.ErrorPayload](t, errMsg).Code != string(protocol.ErrNotHost) {
+		t.Fatal("expected a non-host to still be rejected while the host is disconnected")
+	}
+
+	seatIdx, newConn := joinAndAttach(t, r, "Alice")
+	if seatIdx != 0 {
+		t.Fatalf("expected Alice to reclaim seat 0, got %d", seatIdx)
+	}
+	for i := range conns {
+		if i == 0 {
+			continue
+		}
+		r.Submit(i, cmd(t, protocol.TypeSetReady, protocol.SetReadyPayload{Ready: true}))
+	}
+	r.Submit(0, cmd(t, protocol.TypeSetReady, protocol.SetReadyPayload{Ready: true}))
+	r.Submit(0, cmd(t, protocol.TypeStartGame, struct{}{}))
+	drain(r)
+
+	if _, ok := newConn.last(t, protocol.TypeState); !ok {
+		t.Error("expected the reconnected host to be able to start the game")
+	}
+}
+
+func TestReadySeatResetOnDisconnectInLobby(t *testing.T) {
+	r := startRoom(t)
+	conns := [4]*fakeConn{}
+	for i, name := range [4]string{"Alice", "Bob", "Carol", "Dave"} {
+		_, conn := joinAndAttach(t, r, name)
+		conns[i] = conn
+	}
+	drain(r)
+
+	r.Submit(1, cmd(t, protocol.TypeSetReady, protocol.SetReadyPayload{Ready: true}))
+	drain(r)
+
+	r.Disconnect(1, conns[1])
+	drain(r)
+
+	lobby := decodeData[protocol.PlayersLobbyPayload](t, mustLast(t, conns[0], protocol.TypePlayersLobby))
+	for _, s := range lobby.Seats {
+		if s.Name == "Bob" && s.Ready {
+			t.Error("expected Bob's ready flag to reset after disconnecting")
 		}
 	}
 }

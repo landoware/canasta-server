@@ -42,6 +42,9 @@ const (
 	TypePlayRedThree           MessageType = "play_red_three"
 	TypeGrantPermissionToGoOut MessageType = "grant_permission_to_go_out"
 	TypeAskToGoOut             MessageType = "ask_to_go_out"
+	TypeSetReady               MessageType = "set_ready"
+	TypeReorderSeats           MessageType = "reorder_seats"
+	TypeStartGame              MessageType = "start_game"
 )
 
 // Server -> client message types.
@@ -119,7 +122,23 @@ type LobbySeat struct {
 	SeatIndex int    `json:"seatIndex"`
 	Name      string `json:"name"`
 	Connected bool   `json:"connected"`
+	Ready     bool   `json:"ready"`
+	IsHost    bool   `json:"isHost"`
 }
+
+// SetReadyPayload marks the sender's own seat ready/not-ready to start.
+type SetReadyPayload struct {
+	Ready bool `json:"ready"`
+}
+
+// ReorderSeatsPayload is sent only by the host, only while the room is in
+// the Lobby. Order[pos] is the seat index (connection slot) that should
+// occupy table position pos — a permutation of 0..3.
+type ReorderSeatsPayload struct {
+	Order []int `json:"order"`
+}
+
+// start_game takes no payload beyond the envelope.
 
 // PlayersLobbyPayload is broadcast to all connected seats while a room
 // waits for its remaining players to join.

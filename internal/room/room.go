@@ -54,9 +54,10 @@ type Room struct {
 	inbox chan any
 	done  chan struct{}
 
-	seats [4]*Seat
-	state State
-	game  *canasta.Game
+	seats      [4]*Seat
+	tableOrder [4]int
+	state      State
+	game       *canasta.Game
 
 	lastActivityUnix atomic.Int64
 	connectedCount   atomic.Int32
@@ -65,10 +66,11 @@ type Room struct {
 // NewRoom allocates a room in the Lobby state with four unclaimed seats.
 func NewRoom(code string) *Room {
 	r := &Room{
-		Code:  code,
-		inbox: make(chan any, 32),
-		done:  make(chan struct{}),
-		state: StateLobby,
+		Code:       code,
+		inbox:      make(chan any, 32),
+		done:       make(chan struct{}),
+		state:      StateLobby,
+		tableOrder: [4]int{0, 1, 2, 3},
 	}
 	for i := range r.seats {
 		r.seats[i] = &Seat{Index: i}
@@ -211,9 +213,6 @@ func (r *Room) handleJoin(e joinEvent) {
 			e.result <- joinResult{-1, ErrRoomFull}
 			return
 		}
-		if r.allSeatsNamed() {
-			r.startGame()
-		}
 	}
 
 	e.result <- joinResult{idx, nil}
@@ -246,11 +245,16 @@ func (r *Room) handleAttach(e attachEvent) {
 		r.broadcastExcept(e.seatIndex, protocol.NewServerMessage(protocol.TypePlayerReconnected, protocol.PlayerStatusPayload{SeatIndex: e.seatIndex, Status: "connected"}))
 	}
 	if r.game != nil {
-		r.sendTo(e.seatIndex, protocol.NewServerMessage(protocol.TypeState, protocol.NewStateMessage(r.game, e.seatIndex)))
+		pos := r.posForConnSlot(e.seatIndex)
+		r.sendTo(e.seatIndex, protocol.NewServerMessage(protocol.TypeState, protocol.NewStateMessage(r.game, pos)))
 	}
 }
 
 func (r *Room) handleCommand(e commandEvent) {
+	if r.state == StateLobby {
+		r.handleLobbyCommand(e)
+		return
+	}
 	if r.state != StatePlaying {
 		r.sendError(e.seatIndex, protocol.ErrRoomNotPlaying, "room is not currently playing")
 		return
@@ -268,15 +272,18 @@ func (r *Room) handleCommand(e commandEvent) {
 	}
 }
 
-// startGame builds the canasta.Game once all four seats have named
-// themselves. WithFixedTeamOrder is required here: NewGame's default
-// random team order shuffles its playerNames slice in place, which would
-// break the seat-index-equals-player-index invariant this room relies on
-// throughout (GetClientState, CurrentPlayer, turn enforcement).
+// startGame builds the canasta.Game once the host has confirmed all four
+// seats are named and ready (see applyStartGame in lobby.go). Player order
+// follows tableOrder (the host's chosen seating), not raw connection-slot
+// order. WithFixedTeamOrder is required here: NewGame's default random team
+// order shuffles its playerNames slice in place, which would break the
+// table-position-equals-player-index invariant this room relies on
+// throughout (GetClientState, CurrentPlayer, turn enforcement) — see
+// posForConnSlot for how connection slots map onto that invariant.
 func (r *Room) startGame() {
 	names := make([]string, 4)
-	for i, s := range r.seats {
-		names[i] = s.Name
+	for pos, connSlot := range r.tableOrder {
+		names[pos] = r.seats[connSlot].Name
 	}
 
 	game := canasta.NewGame(r.Code, names, canasta.WithFixedTeamOrder())
@@ -300,6 +307,7 @@ func (r *Room) handleDisconnect(e disconnectEvent) {
 	r.recalculateConnectedCount()
 
 	if r.state == StateLobby {
+		seat.Ready = false
 		r.broadcastLobby()
 	} else {
 		r.broadcastExcept(e.seatIndex, protocol.NewServerMessage(protocol.TypePlayerDisconnected, protocol.PlayerStatusPayload{SeatIndex: e.seatIndex, Status: "disconnected"}))
@@ -340,6 +348,9 @@ func (r *Room) seatIndexForName(name string) int {
 
 // claimOpenSeat assigns name to the next unclaimed seat, if the room is
 // still in the Lobby and has one. Returns -1 if there's no seat to claim.
+// The first seat ever claimed becomes the room's host — see hasHost, and
+// note IsHost is never cleared elsewhere, so host status survives that
+// player disconnecting (no transfer to another seat).
 func (r *Room) claimOpenSeat(name string) int {
 	if r.state != StateLobby {
 		return -1
@@ -347,10 +358,22 @@ func (r *Room) claimOpenSeat(name string) int {
 	for i, s := range r.seats {
 		if s.Name == "" {
 			s.Name = name
+			if !r.hasHost() {
+				s.IsHost = true
+			}
 			return i
 		}
 	}
 	return -1
+}
+
+func (r *Room) hasHost() bool {
+	for _, s := range r.seats {
+		if s.IsHost {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *Room) allSeatsNamed() bool {
@@ -360,6 +383,28 @@ func (r *Room) allSeatsNamed() bool {
 		}
 	}
 	return true
+}
+
+func (r *Room) allSeatsReady() bool {
+	for _, s := range r.seats {
+		if !s.Ready {
+			return false
+		}
+	}
+	return true
+}
+
+// posForConnSlot returns connSlot's table position — its index into
+// r.game.Players — by inverting r.tableOrder. Only meaningful once the
+// game has started; tableOrder is frozen from that point on since
+// reorder_seats is rejected outside StateLobby.
+func (r *Room) posForConnSlot(connSlot int) int {
+	for pos, cs := range r.tableOrder {
+		if cs == connSlot {
+			return pos
+		}
+	}
+	return connSlot // unreachable: tableOrder is always a permutation of 0..3
 }
 
 func (r *Room) recalculateConnectedCount() {
@@ -403,15 +448,28 @@ func (r *Room) broadcastExcept(exceptSeat int, msg protocol.ServerMessage) {
 }
 
 func (r *Room) broadcastState() {
-	for i := range r.seats {
-		r.sendTo(i, protocol.NewServerMessage(protocol.TypeState, protocol.NewStateMessage(r.game, i)))
+	for connSlot := range r.seats {
+		pos := r.posForConnSlot(connSlot)
+		r.sendTo(connSlot, protocol.NewServerMessage(protocol.TypeState, protocol.NewStateMessage(r.game, pos)))
 	}
 }
 
+// broadcastLobby sends every connected seat the full lobby snapshot, with
+// LobbySeats ordered by table position (r.tableOrder) rather than raw
+// connection slot, so the client's array order directly reflects seating.
+// LobbySeat.SeatIndex still identifies the connection slot — a stable key
+// across reorders, like Card.id for hand cards.
 func (r *Room) broadcastLobby() {
-	seats := make([]protocol.LobbySeat, len(r.seats))
-	for i, s := range r.seats {
-		seats[i] = protocol.LobbySeat{SeatIndex: i, Name: s.Name, Connected: s.Connected}
+	seats := make([]protocol.LobbySeat, 4)
+	for pos, connSlot := range r.tableOrder {
+		s := r.seats[connSlot]
+		seats[pos] = protocol.LobbySeat{
+			SeatIndex: connSlot,
+			Name:      s.Name,
+			Connected: s.Connected,
+			Ready:     s.Ready,
+			IsHost:    s.IsHost,
+		}
 	}
 
 	msg := protocol.NewServerMessage(protocol.TypePlayersLobby, protocol.PlayersLobbyPayload{Seats: seats})

@@ -11,4 +11,6 @@ type Seat struct {
 	Conn           Conn
 	Connected      bool
 	DisconnectedAt time.Time
+	Ready          bool
+	IsHost         bool
 }

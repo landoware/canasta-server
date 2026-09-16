@@ -17,6 +17,9 @@ const (
 	ErrRoomNotPlaying ErrorCode = "ROOM_NOT_PLAYING"
 	ErrUnknownType    ErrorCode = "UNKNOWN_MESSAGE_TYPE"
 	ErrInvalidPayload ErrorCode = "INVALID_PAYLOAD"
+	ErrNotHost        ErrorCode = "NOT_HOST"
+	ErrSeatsNotFull   ErrorCode = "SEATS_NOT_FULL"
+	ErrNotAllReady    ErrorCode = "NOT_ALL_READY"
 
 	// Fallback for any internal/canasta error that doesn't follow the
 	// "CODE: message" convention.

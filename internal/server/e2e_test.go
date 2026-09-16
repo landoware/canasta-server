@@ -146,6 +146,14 @@ func TestFourPlayerGameEndToEnd(t *testing.T) {
 		}
 	}
 
+	// The room no longer auto-starts on the 4th join — every seat must
+	// ready up, then the host (seat 0, the first to join) explicitly
+	// starts the game.
+	for _, c := range clients {
+		c.send(protocol.TypeSetReady, protocol.SetReadyPayload{Ready: true})
+	}
+	clients[0].send(protocol.TypeStartGame, struct{}{})
+
 	var latest [4]protocol.StateMessage
 	for i, c := range clients {
 		latest[i] = decode[protocol.StateMessage](t, c.recvUntil(protocol.TypeState))
@@ -248,6 +256,11 @@ func TestNewMeldAllowedDuringDrawPhaseOverSockets(t *testing.T) {
 		clients[i] = c
 		c.recvUntil(protocol.TypeWelcome)
 	}
+
+	for _, c := range clients {
+		c.send(protocol.TypeSetReady, protocol.SetReadyPayload{Ready: true})
+	}
+	clients[0].send(protocol.TypeStartGame, struct{}{})
 
 	var latest [4]protocol.StateMessage
 	for i, c := range clients {
