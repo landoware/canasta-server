@@ -92,6 +92,31 @@ func (c *testClient) recvUntil(msgType protocol.MessageType) protocol.ServerMess
 	return protocol.ServerMessage{}
 }
 
+// waitAllReady blocks until a players_lobby broadcast shows every seat
+// ready, so start_game is only sent once the room actor has actually
+// applied every set_ready — sending it earlier races the actor and gets
+// rejected with NOT_ALL_READY, which the test would otherwise observe as
+// a hung read waiting for the state broadcast that never comes.
+func (c *testClient) waitAllReady(seatCount int) {
+	c.t.Helper()
+	for {
+		lobby := decode[protocol.PlayersLobbyPayload](c.t, c.recvUntil(protocol.TypePlayersLobby))
+		if len(lobby.Seats) != seatCount {
+			continue
+		}
+		allReady := true
+		for _, s := range lobby.Seats {
+			if !s.Ready {
+				allReady = false
+				break
+			}
+		}
+		if allReady {
+			return
+		}
+	}
+}
+
 func decode[T any](t *testing.T, msg protocol.ServerMessage) T {
 	t.Helper()
 	raw, err := json.Marshal(msg.Data)
@@ -152,6 +177,7 @@ func TestFourPlayerGameEndToEnd(t *testing.T) {
 	for _, c := range clients {
 		c.send(protocol.TypeSetReady, protocol.SetReadyPayload{Ready: true})
 	}
+	clients[0].waitAllReady(4)
 	clients[0].send(protocol.TypeStartGame, struct{}{})
 
 	var latest [4]protocol.StateMessage
@@ -260,6 +286,7 @@ func TestNewMeldAllowedDuringDrawPhaseOverSockets(t *testing.T) {
 	for _, c := range clients {
 		c.send(protocol.TypeSetReady, protocol.SetReadyPayload{Ready: true})
 	}
+	clients[0].waitAllReady(4)
 	clients[0].send(protocol.TypeStartGame, struct{}{})
 
 	var latest [4]protocol.StateMessage
