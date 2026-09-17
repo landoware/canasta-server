@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 
@@ -946,6 +947,121 @@ func TestDisconnectThenAwayStatus(t *testing.T) {
 	status := decodeData[protocol.PlayerStatusPayload](t, statusMsg)
 	if status.SeatIndex != 2 || status.Status != "away" {
 		t.Errorf("unexpected away payload: %+v", status)
+	}
+}
+
+func TestChatRelayedInLobby(t *testing.T) {
+	r := startRoom(t)
+	_, aliceConn := joinAndAttach(t, r, "Alice")
+	_, bobConn := joinAndAttach(t, r, "Bob")
+	drain(r)
+
+	r.Submit(0, cmd(t, protocol.TypeChatMessage, protocol.ChatMessagePayload{Text: "hi from the lobby"}))
+	drain(r)
+
+	msg, ok := bobConn.last(t, protocol.TypeChatMessage)
+	if !ok {
+		t.Fatal("expected the other seat to receive the chat broadcast while still in the lobby")
+	}
+	payload := decodeData[protocol.ChatBroadcastPayload](t, msg)
+	if payload.SeatIndex != 0 || payload.Name != "Alice" || payload.Text != "hi from the lobby" {
+		t.Errorf("unexpected chat payload: %+v", payload)
+	}
+
+	if _, ok := aliceConn.last(t, protocol.TypeChatMessage); ok {
+		t.Error("sender should not receive an echo of their own chat message")
+	}
+}
+
+func TestChatRelayedInGame(t *testing.T) {
+	r := startRoom(t)
+	conns := joinAll(t, r, [4]string{"Alice", "Bob", "Carol", "Dave"})
+
+	r.Submit(1, cmd(t, protocol.TypeChatMessage, protocol.ChatMessagePayload{Text: "nice hand"}))
+	drain(r)
+
+	for _, seatIdx := range []int{0, 2, 3} {
+		msg, ok := conns[seatIdx].last(t, protocol.TypeChatMessage)
+		if !ok {
+			t.Fatalf("expected seat %d to receive the chat broadcast", seatIdx)
+		}
+		payload := decodeData[protocol.ChatBroadcastPayload](t, msg)
+		if payload.SeatIndex != 1 || payload.Name != "Bob" || payload.Text != "nice hand" {
+			t.Errorf("unexpected chat payload for seat %d: %+v", seatIdx, payload)
+		}
+	}
+
+	if _, ok := conns[1].last(t, protocol.TypeChatMessage); ok {
+		t.Error("sender should not receive an echo of their own chat message")
+	}
+}
+
+func TestChatNotSentToDisconnectedSeat(t *testing.T) {
+	r := startRoom(t)
+	conns := joinAll(t, r, [4]string{"Alice", "Bob", "Carol", "Dave"})
+
+	r.Disconnect(2, conns[2])
+	drain(r)
+	before := len(conns[2].messages(t))
+
+	r.Submit(0, cmd(t, protocol.TypeChatMessage, protocol.ChatMessagePayload{Text: "anyone there?"}))
+	drain(r)
+
+	after := len(conns[2].messages(t))
+	if after != before {
+		t.Errorf("disconnected seat should not receive new messages, got %d new", after-before)
+	}
+}
+
+func TestChatEmptyMessageDropped(t *testing.T) {
+	r := startRoom(t)
+	conns := joinAll(t, r, [4]string{"Alice", "Bob", "Carol", "Dave"})
+
+	r.Submit(0, cmd(t, protocol.TypeChatMessage, protocol.ChatMessagePayload{Text: "   "}))
+	drain(r)
+
+	for i, c := range conns {
+		if _, ok := c.last(t, protocol.TypeChatMessage); ok {
+			t.Errorf("seat %d should not have received a broadcast for a blank message", i)
+		}
+		if _, ok := c.last(t, protocol.TypeError); ok {
+			t.Errorf("seat %d should not have received an error for a blank message", i)
+		}
+	}
+}
+
+func TestChatOverLengthRejected(t *testing.T) {
+	r := startRoom(t)
+	conns := joinAll(t, r, [4]string{"Alice", "Bob", "Carol", "Dave"})
+
+	tooLong := strings.Repeat("a", maxChatMessageLength+1)
+	r.Submit(0, cmd(t, protocol.TypeChatMessage, protocol.ChatMessagePayload{Text: tooLong}))
+	drain(r)
+
+	errMsg := mustLast(t, conns[0], protocol.TypeError)
+	errPayload := decodeData[protocol.ErrorPayload](t, errMsg)
+	if errPayload.Code != string(protocol.ErrValidation) {
+		t.Errorf("expected %s, got %s", protocol.ErrValidation, errPayload.Code)
+	}
+
+	for _, seatIdx := range []int{1, 2, 3} {
+		if _, ok := conns[seatIdx].last(t, protocol.TypeChatMessage); ok {
+			t.Errorf("seat %d should not have received an over-length message", seatIdx)
+		}
+	}
+}
+
+func TestChatMalformedPayloadRejected(t *testing.T) {
+	r := startRoom(t)
+	conns := joinAll(t, r, [4]string{"Alice", "Bob", "Carol", "Dave"})
+
+	r.Submit(0, protocol.ClientMessage{Type: protocol.TypeChatMessage, Data: json.RawMessage(`{not valid json`)})
+	drain(r)
+
+	errMsg := mustLast(t, conns[0], protocol.TypeError)
+	errPayload := decodeData[protocol.ErrorPayload](t, errMsg)
+	if errPayload.Code != string(protocol.ErrInvalidPayload) {
+		t.Errorf("expected %s, got %s", protocol.ErrInvalidPayload, errPayload.Code)
 	}
 }
 

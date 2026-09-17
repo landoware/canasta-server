@@ -251,6 +251,11 @@ func (r *Room) handleAttach(e attachEvent) {
 }
 
 func (r *Room) handleCommand(e commandEvent) {
+	if e.msg.Type == protocol.TypeChatMessage {
+		r.applyChatMessage(e.seatIndex, e.msg)
+		return
+	}
+
 	if r.state == StateLobby {
 		r.handleLobbyCommand(e)
 		return
